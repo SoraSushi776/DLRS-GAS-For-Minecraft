@@ -11,11 +11,12 @@ import org.bukkit.entity.Player
  * DLRS 自动登录服务
  * 使用 access_token 进行快速登录
  */
-class DLRSAutoLoginService(private val config: DLRSConfig) {
+class DLRSAutoLoginService(private val config: DLRSConfig, private val dataService: PlayerDataService) {
 
     companion object {
         private const val AUTO_LOGIN_API_URL = "https://api.chinadlrs.com/developer/auto-login.php"
         private const val PROFILE_API_URL = "https://api.chinadlrs.com/developer/profile.php"
+        private const val LOGOUT_API_URL = "https://api.chinadlrs.com/developer/oauth.php"
     }
 
     /**
@@ -25,32 +26,37 @@ class DLRSAutoLoginService(private val config: DLRSConfig) {
      * @return 是否成功自动登录
      */
     fun tryAutoLogin(player: Player): Boolean {
-        val plugin = Bukkit.getPluginManager().getPlugin("DLRS-GAS-For-Minecraft")!!
-        val pluginConfig = plugin.config
-        val path = "players.${player.uniqueId.toString()}"
+        // 从数据库获取用户信息
+        val userInfo = dataService.getPlayerInfo(player.uniqueId)
 
-        // 检查是否有存储的 access_token
-        val accessToken = pluginConfig.getString("$path.access_token")
-        val email = pluginConfig.getString("$path.email")
-
-        if (accessToken.isNullOrEmpty() || email.isNullOrEmpty()) {
+        if (userInfo == null || userInfo.accessToken.isEmpty()) {
             return false
         }
 
         player.sendMessage("§e[DLRS-GAS] §7正在尝试自动登录...")
 
         // 验证 access_token
-        if (validateAccessToken(email, accessToken)) {
-            // 获取用户信息
-            val userInfo = fetchUserInfo(email, accessToken)
-            if (userInfo != null) {
+        if (validateAccessToken(userInfo.email, userInfo.accessToken)) {
+            // 获取最新用户信息
+            val updatedUserInfo = fetchUserInfo(userInfo.email, userInfo.accessToken)
+            if (updatedUserInfo != null) {
                 player.sendMessage("§a[DLRS-GAS] §7自动登录成功！")
-                player.sendMessage("§a[DLRS-GAS] §7欢迎回来，§f${userInfo.nickname}§7!")
+                player.sendMessage("§a[DLRS-GAS] §7欢迎回来，§f${updatedUserInfo.nickname}§7!")
 
                 // 解锁玩家并设置权限
                 DLRSGASForMinecraft.lockServiceInstance.unlockPlayer(player)
-                DLRSGASForMinecraft.lockServiceInstance.setPlayerPermissions(player, userInfo)
-                DLRSGASForMinecraft.lockServiceInstance.setPlayerDisplayName(player, userInfo)
+                DLRSGASForMinecraft.lockServiceInstance.setPlayerPermissions(player, updatedUserInfo)
+                DLRSGASForMinecraft.lockServiceInstance.setPlayerDisplayName(player, updatedUserInfo)
+
+                // 发送加入消息
+                Bukkit.getScheduler().scheduleSyncDelayedTask(
+                    Bukkit.getPluginManager().getPlugin("DLRS-GAS-For-Minecraft")!!,
+                    Runnable {
+                        Bukkit.broadcastMessage("§a[DLRS-GAS] §f${updatedUserInfo.nickname} §7(${player.name}) §7加入了游戏")
+                        DLRSGASForMinecraft.loggedPlayers.put(player.uniqueId, player.name)
+                    },
+                    5L
+                )
 
                 return true
             } else {
@@ -62,7 +68,7 @@ class DLRSAutoLoginService(private val config: DLRSConfig) {
             player.sendMessage("§e[DLRS-GAS] §7请使用 /dlrs login 重新登录")
 
             // 清除过期的 token
-            clearPlayerData(player.uniqueId)
+            dataService.clearPlayerData(player.uniqueId)
             return false
         }
     }
@@ -128,17 +134,22 @@ class DLRSAutoLoginService(private val config: DLRSConfig) {
      * 清除玩家数据
      */
     private fun clearPlayerData(playerUuid: java.util.UUID) {
-        val plugin = Bukkit.getPluginManager().getPlugin("DLRS-GAS-For-Minecraft")!!
-        val config = plugin.config
-
-        config.set("players.${playerUuid.toString()}", null)
-        plugin.saveConfig()
+        dataService.clearPlayerData(playerUuid)
     }
 
     /**
      * 登出玩家
      */
     fun logout(player: Player): Boolean {
+        // 从数据库获取用户信息，用于调用退出登录接口
+        val userInfo = dataService.getPlayerInfo(player.uniqueId)
+
+        // 调用 GAS 退出登录接口
+        if (userInfo != null && userInfo.accessToken.isNotEmpty()) {
+            logoutFromGAS(userInfo.email, userInfo.accessToken)
+        }
+
+        // 清除本地玩家数据
         clearPlayerData(player.uniqueId)
 
         // 清除锁定状态、重置显示名称和 OP 权限
@@ -161,5 +172,30 @@ class DLRSAutoLoginService(private val config: DLRSConfig) {
         )
 
         return true
+    }
+
+    /**
+     * 调用 GAS 退出登录接口 (type=5)
+     */
+    private fun logoutFromGAS(email: String, accessToken: String) {
+        val appId = config.getAppId()
+        val language = config.getLanguage()
+
+        // 构建请求 JSON
+        val requestJson = HttpUtil.createJsonObject(
+            "appid" to appId,
+            "email" to email,
+            "access_token" to accessToken
+        )
+
+        // 发送请求
+        val url = "$LOGOUT_API_URL?type=5&lang=$language"
+        val response = HttpUtil.postJson(url, requestJson.toString())
+
+        if (response != null && response.getInt("code") == 200) {
+            Bukkit.getLogger().info("[DLRS-GAS] 玩家 $email 已成功退出 GAS")
+        } else {
+            Bukkit.getLogger().warning("[DLRS-GAS] 退出 GAS 失败：${response?.getString("msg")}")
+        }
     }
 }

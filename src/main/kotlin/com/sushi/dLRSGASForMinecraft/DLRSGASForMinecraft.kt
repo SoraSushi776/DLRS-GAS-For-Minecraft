@@ -5,18 +5,22 @@ import com.sushi.dLRSGASForMinecraft.config.DLRSConfig
 import com.sushi.dLRSGASForMinecraft.listener.PlayerLockListener
 import com.sushi.dLRSGASForMinecraft.service.DLRSAutoLoginService
 import com.sushi.dLRSGASForMinecraft.service.DLRSLoginService
+import com.sushi.dLRSGASForMinecraft.service.PlayerDataService
 import com.sushi.dLRSGASForMinecraft.service.PlayerLockService
 import io.papermc.paper.command.brigadier.BasicCommand
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import org.bukkit.Bukkit
 import org.bukkit.command.Command
 import org.bukkit.command.CommandSender
+import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.plugin.java.JavaPlugin
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class DLRSGASForMinecraft : JavaPlugin(), Listener {
 
@@ -24,6 +28,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
     private lateinit var loginService: DLRSLoginService
     private lateinit var autoLoginService: DLRSAutoLoginService
     private lateinit var lockService: PlayerLockService
+    private lateinit var dataService: PlayerDataService
     private lateinit var commandHandler: DLRSCommandHandler
     private lateinit var lockListener: PlayerLockListener
 
@@ -32,6 +37,8 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
             private set
         lateinit var lockServiceInstance: PlayerLockService
             private set
+        // 存储已登录玩家（用于控制加入消息显示）
+        val loggedPlayers = ConcurrentHashMap<UUID, String>()
     }
 
     override fun onEnable() {
@@ -43,9 +50,13 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         // 初始化配置管理器
         config = DLRSConfig(this)
 
+        // 初始化数据库服务
+        dataService = PlayerDataService(dataFolder)
+        dataService.initialize()
+
         // 初始化服务
-        loginService = DLRSLoginService(config)
-        autoLoginService = DLRSAutoLoginService(config)
+        loginService = DLRSLoginService(config, dataService)
+        autoLoginService = DLRSAutoLoginService(config, dataService)
         lockService = PlayerLockService()
 
         // 保存静态引用
@@ -125,6 +136,9 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
             lockService.resetPlayerDisplayName(player)
         }
 
+        // 关闭数据库连接
+        dataService.shutdown()
+
         // 输出关闭信息
         logger.info("§c========================================")
         logger.info("§c  DLRS-GAS For Minecraft 插件已禁用!")
@@ -146,17 +160,33 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
                 if (!success) {
                     // 自动登录失败，锁定玩家
                     Bukkit.getScheduler().runTask(this, Runnable {
+                        event.joinMessage = null // 不显示加入消息
                         lockService.lockPlayer(player)
+                        setUnloggedPlayerListName(player)
+                        player.sendMessage("§e[DLRS-GAS] §7自动登录失败，请使用 /dlrs login 进行登录")
                     })
+                } else {
+                    // 自动登录成功，显示正常加入消息（在 loggedPlayers 中有记录）
+                    loggedPlayers[player.uniqueId] = player.name
                 }
             } else {
                 // 未登录，锁定玩家
                 Bukkit.getScheduler().runTask(this, Runnable {
+                    event.joinMessage = null // 不显示加入消息
                     lockService.lockPlayer(player)
+                    setUnloggedPlayerListName(player)
                     player.sendMessage("§e[DLRS-GAS] §7请使用 /dlrs login 进行登录")
                 })
             }
         })
+    }
+
+    /**
+     * 设置未登录玩家的 Tab 列表名称（灰色斜体）
+     */
+    private fun setUnloggedPlayerListName(player: Player) {
+        val unloggedName = "§8§o（未登录）${player.name}"
+        player.setPlayerListName(unloggedName)
     }
 
     /**

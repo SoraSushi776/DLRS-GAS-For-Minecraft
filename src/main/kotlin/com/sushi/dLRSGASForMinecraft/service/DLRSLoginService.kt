@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap
  * DLRS OAuth登录服务
  * 实现完整的OAuth登录流程
  */
-class DLRSLoginService(private val config: DLRSConfig) {
+class DLRSLoginService(private val config: DLRSConfig, private val dataService: PlayerDataService) {
     
     companion object {
         private const val OAUTH_API_URL = "https://api.chinadlrs.com/developer/oauth.php"
@@ -170,13 +170,23 @@ class DLRSLoginService(private val config: DLRSConfig) {
                 session.player.sendMessage("§a[DLRS-GAS] §7邮箱: §f${userInfo.email}")
                 session.player.sendMessage("§a[DLRS-GAS] §7用户ID: §f${userInfo.uid}")
                 
-                // 保存用户信息到配置文件
-                saveUserInfo(session.player.uniqueId, userInfo)
+                // 保存用户信息到数据库
+                dataService.saveUserInfo(session.player.uniqueId, userInfo)
 
                 // 解锁玩家并设置权限
                 DLRSGASForMinecraft.lockServiceInstance.unlockPlayer(session.player)
                 DLRSGASForMinecraft.lockServiceInstance.setPlayerPermissions(session.player, userInfo)
                 DLRSGASForMinecraft.lockServiceInstance.setPlayerDisplayName(session.player, userInfo)
+
+                // 发送加入消息
+                Bukkit.getScheduler().scheduleSyncDelayedTask(
+                    Bukkit.getPluginManager().getPlugin("DLRS-GAS-For-Minecraft")!!,
+                    Runnable {
+                        Bukkit.broadcastMessage("§a[DLRS-GAS] §f${userInfo.nickname} §7(${session.player.name}) §7加入了游戏")
+                        DLRSGASForMinecraft.loggedPlayers.put(session.player.uniqueId, session.player.name)
+                    },
+                    5L
+                )
 
                 // 移除会话
                 loginSessions.remove(session.player.uniqueId)
@@ -232,54 +242,16 @@ class DLRSLoginService(private val config: DLRSConfig) {
     }
     
     /**
-     * 保存用户信息到配置文件
-     */
-    private fun saveUserInfo(playerUuid: UUID, userInfo: UserInfo) {
-        val plugin = Bukkit.getPluginManager().getPlugin("DLRS-GAS-For-Minecraft")!!
-        val config = plugin.config
-        
-        val path = "players.${playerUuid.toString()}"
-        config.set("$path.uid", userInfo.uid)
-        config.set("$path.nickname", userInfo.nickname)
-        config.set("$path.email", userInfo.email)
-        config.set("$path.access_token", userInfo.accessToken)
-        config.set("$path.avatar_url", userInfo.avatarUrl)
-        config.set("$path.user_group", userInfo.userGroup)
-        
-        plugin.saveConfig()
-    }
-    
-    /**
      * 获取玩家的登录状态
      */
     fun isLoggedIn(player: Player): Boolean {
-        val plugin = Bukkit.getPluginManager().getPlugin("DLRS-GAS-For-Minecraft")!!
-        val config = plugin.config
-        val path = "players.${player.uniqueId.toString()}.access_token"
-        
-        return config.getString(path) != null
+        return dataService.isLoggedIn(player.uniqueId)
     }
-    
+
     /**
      * 获取玩家的用户信息
      */
     fun getPlayerInfo(player: Player): UserInfo? {
-        val plugin = Bukkit.getPluginManager().getPlugin("DLRS-GAS-For-Minecraft")!!
-        val config = plugin.config
-        val path = "players.${player.uniqueId.toString()}"
-        
-        if (!config.contains(path)) {
-            return null
-        }
-        
-        return UserInfo(
-            uid = config.getString("$path.uid") ?: "",
-            nickname = config.getString("$path.nickname") ?: "",
-            email = config.getString("$path.email") ?: "",
-            accessToken = config.getString("$path.access_token") ?: "",
-            avatarUrl = config.getString("$path.avatar_url") ?: "",
-            userGroup = config.getString("$path.user_group") ?: "",
-            isInGroup2 = config.getString("$path.user_group")?.split(",")?.contains("2") ?: false
-        )
+        return dataService.getPlayerInfo(player.uniqueId)
     }
 }

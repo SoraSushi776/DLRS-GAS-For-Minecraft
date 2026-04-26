@@ -137,12 +137,17 @@ class PlayerLockService {
     }
 
     /**
-     * 设置玩家显示名称 - GAS 昵称 (UID)
+     * 设置玩家显示名称 - GAS 昵称（UID）
+     * 登录成功后调用，Tab 列表显示白色：GAS 用户名（游戏 ID）
      */
-    fun setPlayerDisplayName(player: Player, userInfo: UserInfo) {
+    fun setPlayerDisplayName(player: Player, userInfo: UserInfo, joinMessage: String? = null) {
         val displayName = "§f${userInfo.nickname}§7(${userInfo.uid})"
         player.setDisplayName(displayName)
-        player.setPlayerListName(displayName)
+
+        // Tab 列表显示白色：GAS 用户名（游戏 ID）
+        val playerListName = "§f${userInfo.nickname} §7(${player.name})"
+        player.setPlayerListName(playerListName)
+
         player.setCustomName(displayName)
         player.isCustomNameVisible = true
     }
