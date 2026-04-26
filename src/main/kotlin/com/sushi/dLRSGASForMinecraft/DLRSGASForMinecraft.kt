@@ -7,6 +7,7 @@ import com.sushi.dLRSGASForMinecraft.service.DLRSAutoLoginService
 import com.sushi.dLRSGASForMinecraft.service.DLRSLoginService
 import com.sushi.dLRSGASForMinecraft.service.PlayerDataService
 import com.sushi.dLRSGASForMinecraft.service.PlayerLockService
+import com.sushi.dLRSGASForMinecraft.service.TabListService
 import io.papermc.paper.command.brigadier.BasicCommand
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import org.bukkit.Bukkit
@@ -31,6 +32,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
     private lateinit var dataService: PlayerDataService
     private lateinit var commandHandler: DLRSCommandHandler
     private lateinit var lockListener: PlayerLockListener
+    private lateinit var tabListService: TabListService
 
     companion object {
         lateinit var instance: DLRSGASForMinecraft
@@ -67,6 +69,15 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
 
         // 初始化锁定监听器
         lockListener = PlayerLockListener(lockService)
+
+        // 初始化Tab列表服务
+        tabListService = TabListService(this)
+        tabListService.initialize()
+
+        // 启动定时任务，每5秒更新一次所有玩家的Tab列表
+        Bukkit.getScheduler().runTaskTimer(this, Runnable {
+            tabListService.updateAllPlayersTabList()
+        }, 100L, 100L) // 20 ticks = 1 second, 100 ticks = 5 seconds
 
         // 注册命令（使用 registerCommand 方法）
         registerDlrsCommand()
@@ -168,6 +179,8 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
                 } else {
                     // 自动登录成功，显示正常加入消息（在 loggedPlayers 中有记录）
                     loggedPlayers[player.uniqueId] = player.name
+                    // 更新Tab列表显示
+                    tabListService.updatePlayerTabList(player)
                 }
             } else {
                 // 未登录，锁定玩家
@@ -176,6 +189,8 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
                     lockService.lockPlayer(player)
                     setUnloggedPlayerListName(player)
                     player.sendMessage("§e[DLRS-GAS] §7请使用 /dlrs login 进行登录")
+                    // 即使未登录也更新Tab列表显示
+                    tabListService.updatePlayerTabList(player)
                 })
             }
         })
@@ -198,5 +213,12 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         // 清理锁定状态（不发送消息）
         lockService.clearLock(player)
         lockService.resetPlayerDisplayName(player)
+    }
+
+    /**
+     * 获取DataService实例（供其他服务使用）
+     */
+    fun getDataService(): PlayerDataService {
+        return dataService
     }
 }
