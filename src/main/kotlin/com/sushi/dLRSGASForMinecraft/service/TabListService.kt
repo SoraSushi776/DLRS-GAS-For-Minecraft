@@ -84,11 +84,15 @@ class TabListService(private val plugin: DLRSGASForMinecraft) {
         // 替换GAS用户昵称占位符
         val userInfo = dataService.getPlayerInfo(player.uniqueId)
         val gasNickname = userInfo?.nickname ?: "未登录"
+        val gasUid = userInfo?.uid?.toString() ?: "未登录"
+        val gasEmail = userInfo?.email ?: "未登录"
         result = result.replace("%gas_nickname%", gasNickname)
-        
+        result = result.replace("%gas_uid%", gasUid)
+        result = result.replace("%gas_email%", gasEmail)
+
         // 转换颜色代码
         result = convertColorCodes(result)
-        
+
         return result
     }
 
@@ -120,5 +124,6 @@ class TabListService(private val plugin: DLRSGASForMinecraft) {
     fun reload() {
         initialize()
         updateAllPlayersTabList()
+        plugin.logger.info("§a[DLRS-GAS] Tab 列表配置已重载")
     }
 }

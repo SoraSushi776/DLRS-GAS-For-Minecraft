@@ -26,6 +26,13 @@ tab-list:
     &7GAS 昵称：%gas_nickname%
     &7延迟：%ping%ms | TPS: %tps%
 
+# 登录超时配置
+login-timeout:
+  # 是否启用登录超时检测
+  enabled: true
+  # 超时时间（秒），默认 60 秒
+  timeout-seconds: 60
+
 # 玩家数据存储
 # 玩家登录信息将自动存储在 players 节点下
 # 无需手动修改

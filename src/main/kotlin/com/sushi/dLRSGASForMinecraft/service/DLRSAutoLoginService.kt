@@ -40,6 +40,24 @@ class DLRSAutoLoginService(private val config: DLRSConfig, private val dataServi
             // 获取最新用户信息
             val updatedUserInfo = fetchUserInfo(userInfo.email, userInfo.accessToken)
             if (updatedUserInfo != null) {
+                // 检查并处理账号绑定
+                val bindResult = dataService.checkAndBindAccount(
+                    updatedUserInfo.uid,
+                    player.uniqueId.toString(),
+                    player.name
+                )
+                if (!bindResult.success) {
+                    // 绑定冲突，在主线程中踢出玩家
+                    Bukkit.getScheduler().scheduleSyncDelayedTask(
+                        DLRSGASForMinecraft.instance,
+                        {
+                            player.kickPlayer(bindResult.message)
+                        },
+                        1L
+                    )
+                    return false
+                }
+
                 player.sendMessage("§a[DLRS-GAS] §7自动登录成功！")
                 player.sendMessage("§a[DLRS-GAS] §7欢迎回来，§f${updatedUserInfo.nickname}§7!")
 

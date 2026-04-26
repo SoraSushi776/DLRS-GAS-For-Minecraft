@@ -8,14 +8,20 @@ import org.bukkit.plugin.java.JavaPlugin
  * 管理DLRS-GAS的配置信息
  */
 class DLRSConfig(private val plugin: JavaPlugin) {
-    
+
     companion object {
         const val APP_ID_KEY = "dlrs.app-id"
         const val APP_TOKEN_KEY = "dlrs.app-token"
         const val LANGUAGE_KEY = "dlrs.language"
-        
+
+        // 登录超时配置
+        const val LOGIN_TIMEOUT_ENABLED_KEY = "login-timeout.enabled"
+        const val LOGIN_TIMEOUT_SECONDS_KEY = "login-timeout.timeout-seconds"
+
         // 默认配置值
         const val DEFAULT_LANGUAGE = "en"
+        const val DEFAULT_TIMEOUT_ENABLED = true
+        const val DEFAULT_TIMEOUT_SECONDS = 60
     }
     
     private val config: FileConfiguration = plugin.config
@@ -39,6 +45,20 @@ class DLRSConfig(private val plugin: JavaPlugin) {
      */
     fun getLanguage(): String {
         return config.getString(LANGUAGE_KEY, DEFAULT_LANGUAGE) ?: DEFAULT_LANGUAGE
+    }
+
+    /**
+     * 获取登录超时是否启用
+     */
+    fun isLoginTimeoutEnabled(): Boolean {
+        return config.getBoolean(LOGIN_TIMEOUT_ENABLED_KEY, DEFAULT_TIMEOUT_ENABLED)
+    }
+
+    /**
+     * 获取登录超时时间（秒）
+     */
+    fun getLoginTimeoutSeconds(): Int {
+        return config.getInt(LOGIN_TIMEOUT_SECONDS_KEY, DEFAULT_TIMEOUT_SECONDS)
     }
     
     /**

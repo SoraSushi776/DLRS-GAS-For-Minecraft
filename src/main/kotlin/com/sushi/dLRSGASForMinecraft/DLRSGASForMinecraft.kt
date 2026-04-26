@@ -65,7 +65,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         lockServiceInstance = lockService
 
         // 初始化命令处理器
-        commandHandler = DLRSCommandHandler(loginService, autoLoginService)
+        commandHandler = DLRSCommandHandler(loginService, autoLoginService, dataService)
 
         // 初始化锁定监听器
         lockListener = PlayerLockListener(lockService)
@@ -127,12 +127,12 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         }
 
         override fun execute(source: CommandSourceStack, args: Array<String>) {
-            val sender = source.executor as CommandSender
+            val sender = source.sender
             bukkitCommand.execute(sender, "dlrs", args)
         }
 
         override fun suggest(source: CommandSourceStack, args: Array<String>): Collection<String> {
-            val sender = source.executor as CommandSender
+            val sender = source.sender
             return bukkitCommand.tabComplete(sender, "dlrs", args)
         }
     }
@@ -220,5 +220,49 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
      */
     fun getDataService(): PlayerDataService {
         return dataService
+    }
+
+    /**
+     * 获取 TabListService 实例（供其他服务使用）
+     */
+    fun getTabListService(): TabListService {
+        return tabListService
+    }
+
+    /**
+     * 获取 Config 实例（供其他服务使用）
+     */
+    fun getConfigManager(): DLRSConfig {
+        return config
+    }
+
+    /**
+     * 重载插件配置
+     */
+    fun reloadPluginConfig(): Boolean {
+        return try {
+            // 重新加载配置文件
+            reloadConfig()
+
+            // 重新初始化配置管理器
+            config = DLRSConfig(this)
+
+            // 重新初始化服务
+            loginService = DLRSLoginService(config, dataService)
+            autoLoginService = DLRSAutoLoginService(config, dataService)
+
+            // 重新初始化命令处理器
+            commandHandler = DLRSCommandHandler(loginService, autoLoginService, dataService)
+
+            // 重新初始化 Tab 列表服务
+            tabListService.reload()
+
+            logger.info("§a[DLRS-GAS] 配置已成功重载!")
+            true
+        } catch (e: Exception) {
+            logger.severe("§c[DLRS-GAS] 重载配置失败：${e.message}")
+            e.printStackTrace()
+            false
+        }
     }
 }

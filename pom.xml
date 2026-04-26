@@ -6,7 +6,7 @@
 
     <groupId>com.sushi</groupId>
     <artifactId>DLRS-GAS-For-Minecraft</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0-3</version>
     <packaging>jar</packaging>
 
     <name>DLRS-GAS-For-Minecraft</name>
