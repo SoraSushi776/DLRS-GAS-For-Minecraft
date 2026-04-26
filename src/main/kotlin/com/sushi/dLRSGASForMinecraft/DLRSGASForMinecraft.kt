@@ -70,11 +70,11 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         // 初始化锁定监听器
         lockListener = PlayerLockListener(lockService)
 
-        // 初始化Tab列表服务
+        // 初始化 Tab 列表服务
         tabListService = TabListService(this)
         tabListService.initialize()
 
-        // 启动定时任务，每5秒更新一次所有玩家的Tab列表
+        // 启动定时任务，每 5 秒更新一次所有玩家的 Tab 列表
         Bukkit.getScheduler().runTaskTimer(this, Runnable {
             tabListService.updateAllPlayersTabList()
         }, 100L, 100L) // 20 ticks = 1 second, 100 ticks = 5 seconds
@@ -179,7 +179,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
                 } else {
                     // 自动登录成功，显示正常加入消息（在 loggedPlayers 中有记录）
                     loggedPlayers[player.uniqueId] = player.name
-                    // 更新Tab列表显示
+                    // 更新 Tab 列表显示
                     tabListService.updatePlayerTabList(player)
                 }
             } else {
@@ -189,7 +189,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
                     lockService.lockPlayer(player)
                     setUnloggedPlayerListName(player)
                     player.sendMessage("§e[DLRS-GAS] §7请使用 /dlrs login 进行登录")
-                    // 即使未登录也更新Tab列表显示
+                    // 即使未登录也更新 Tab 列表显示
                     tabListService.updatePlayerTabList(player)
                 })
             }
@@ -216,7 +216,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
     }
 
     /**
-     * 获取DataService实例（供其他服务使用）
+     * 获取 DataService 实例（供其他服务使用）
      */
     fun getDataService(): PlayerDataService {
         return dataService

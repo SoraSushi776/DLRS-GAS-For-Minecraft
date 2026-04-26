@@ -2,29 +2,29 @@
 # 请根据实际情况修改以下配置
 
 dlrs:
-  # DLRS应用ID (从DLRS开发者后台获取)
+  # DLRS 应用 ID (从 DLRS 开发者后台获取)
   app-id: ""
-  
-  # DLRS应用Token (从DLRS开发者后台获取，请妥善保管)
+
+  # DLRS 应用 Token (从 DLRS 开发者后台获取，请妥善保管)
   app-token: ""
-  
-  # 语言设置 (en=英文, zh=中文)
+
+  # 语言设置 (en=英文，zh=中文)
   language: "en"
 
-# Tab列表配置
+# Tab 列表配置
 tab-list:
-  # 是否启用Tab列表自定义
+  # 是否启用 Tab 列表自定义
   enabled: true
-  
-  # Tab列表顶部显示内容（支持颜色代码和占位符）
+
+  # Tab 列表顶部显示内容（支持颜色代码和占位符）
   header: |
     &e&lDLRS-GAS 服务器
     &7欢迎回来，%player%
-  
-  # Tab列表底部显示内容（支持颜色代码和占位符）
+
+  # Tab 列表底部显示内容（支持颜色代码和占位符）
   footer: |
-    &7GAS昵称: %gas_nickname%
-    &7延迟: %ping%ms | TPS: %tps%
+    &7GAS 昵称：%gas_nickname%
+    &7延迟：%ping%ms | TPS: %tps%
 
 # 玩家数据存储
 # 玩家登录信息将自动存储在 players 节点下
