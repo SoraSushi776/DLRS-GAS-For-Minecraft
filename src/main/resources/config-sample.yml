@@ -1,0 +1,17 @@
+# DLRS-GAS For Minecraft 配置文件
+# 请根据实际情况修改以下配置
+
+dlrs:
+  # DLRS应用ID (从DLRS开发者后台获取)
+  app-id: ""
+  
+  # DLRS应用Token (从DLRS开发者后台获取，请妥善保管)
+  app-token: ""
+  
+  # 语言设置 (en=英文, zh=中文)
+  language: "en"
+
+# 玩家数据存储
+# 玩家登录信息将自动存储在 players 节点下
+# 无需手动修改
+players: {}

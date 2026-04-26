@@ -1,0 +1,9 @@
+name: DLRS-GAS-For-Minecraft
+version: '${version}'
+authors:
+  - 筱夕 Sushi（EroSushi_Meow）
+
+main: com.sushi.dLRSGASForMinecraft.DLRSGASForMinecraft
+bootstrapper: com.sushi.dLRSGASForMinecraft.DLRSGASForMinecraftBootstrap
+api-version: '1.21.8'
+load: POSTWORLD
