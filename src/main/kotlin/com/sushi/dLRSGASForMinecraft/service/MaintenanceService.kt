@@ -5,10 +5,6 @@ import com.sushi.dLRSGASForMinecraft.util.AESEncryptor
 import com.sushi.dLRSGASForMinecraft.util.HttpUtil
 import org.bukkit.Bukkit
 import org.json.JSONObject
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 服务器维护状态检查服务
@@ -18,7 +14,6 @@ class MaintenanceService(private val config: DLRSConfig) {
 
     companion object {
         private const val MAINTENANCE_API_URL = "https://api.chinadlrs.com/developer/maint.php"
-        private const val CHECK_TIMEOUT_SECONDS = 5L
     }
 
     // 是否启用维护检查
@@ -33,83 +28,72 @@ class MaintenanceService(private val config: DLRSConfig) {
             return Pair(false, "")
         }
 
-        val result = AtomicBoolean(false)
-        val message = AtomicReference<String>("")
-        val latch = CountDownLatch(1)
-
         val appId = config.getAppId()
         val appToken = config.getAppToken()
         val language = config.getLanguage()
 
-        // 异步执行 HTTP 请求
-        Bukkit.getScheduler().runTaskAsynchronously(
-            Bukkit.getPluginManager().getPlugin("DLRS-GAS-For-Minecraft")!!,
-            Runnable {
-                try {
-                    // 加密 appToken
-                    val encryptedToken = AESEncryptor.encrypt(appToken, appToken)
-
-                    val appIdInt = appId.toIntOrNull() ?: 0
-                    val requestJson = JSONObject()
-                    requestJson.put("appid", appIdInt)
-                    requestJson.put("apptoken", encryptedToken)
-
-                    val url = "$MAINTENANCE_API_URL?lang=$language"
-                    val response = HttpUtil.postJson(url, requestJson.toString())
-
-                    if (response != null) {
-                        val code = response.getInt("code")
-
-                        when (code) {
-                            200 -> {
-                                // 有维护事件
-                                val data = response.getJSONObject("data")
-                                result.set(true)
-
-                                // 尝试解密维护内容
-                                val encryptedContent = data.optString("content", "")
-                                val decryptedMessage = try {
-                                    AESEncryptor.decrypt(encryptedContent, appToken)
-                                } catch (e: Exception) {
-                                    encryptedContent
-                                }
-
-                                message.set(decryptedMessage.ifEmpty { config.getMaintenanceCustomMessage() })
-                            }
-                            201 -> {
-                                // 无维护事件
-                                result.set(false)
-                                message.set("")
-                            }
-                            else -> {
-                                // 其他错误，假设不在维护
-                                result.set(false)
-                                message.set(config.getMaintenanceCustomMessage())
-                            }
-                        }
-                    } else {
-                        // 请求失败，假设不在维护
-                        result.set(false)
-                        message.set("")
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    result.set(false)
-                    message.set("")
-                } finally {
-                    latch.countDown()
-                }
-            }
-        )
-
-        // 等待结果（最多 5 秒）
         try {
-            latch.await(CHECK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
-        }
+            // 直接同步执行 HTTP 请求
+            val encryptedToken = AESEncryptor.encrypt(appToken, appToken)
 
-        return Pair(result.get(), message.get())
+            val appIdInt = appId.toIntOrNull() ?: 0
+            val requestJson = JSONObject()
+            requestJson.put("appid", appIdInt)
+            requestJson.put("apptoken", encryptedToken)
+
+            val url = "$MAINTENANCE_API_URL?lang=$language"
+            val response = HttpUtil.postJson(url, requestJson.toString())
+
+            if (response != null) {
+                val code = response.getInt("code")
+
+                if (code == 200) {
+                    // 有维护事件 - 踢出玩家
+                    val data = response.getJSONObject("data")
+
+                    // 解密维护内容和结束时间
+                    val encryptedContent = data.optString("content", "")
+                    val encryptedEndTime = data.optString("end_time", "")
+
+                    val decryptedMessage = try {
+                        AESEncryptor.decrypt(encryptedContent, appToken)
+                    } catch (e: Exception) {
+                        encryptedContent
+                    }
+
+                    val decryptedEndTime = try {
+                        AESEncryptor.decrypt(encryptedEndTime, appToken)
+                    } catch (e: Exception) {
+                        encryptedEndTime
+                    }
+
+                    // 构建完整的维护消息
+                    val maintMsg = buildString {
+                        appendLine("&c&l[DLRS-GAS] 服务器正在维护中！")
+                        appendLine()
+                        appendLine("&e维护信息：")
+                        appendLine(decryptedMessage.ifEmpty { "&7暂无详细说明" })
+                        appendLine()
+                        appendLine("&e维护结束时间：")
+                        appendLine(decryptedEndTime.ifEmpty { "&7暂未公布" })
+                    }
+
+                    return Pair(true, maintMsg)
+                } else if (code == 201) {
+                    // 无维护事件
+                    return Pair(false, "")
+                } else {
+                    // 其他错误，假设不在维护
+                    return Pair(false, "")
+                }
+            } else {
+                // 请求失败，假设不在维护
+                return Pair(false, "")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return Pair(false, "")
+        }
     }
 
     /**

@@ -74,7 +74,7 @@ class PlayerLockService {
         player.isInvulnerable = true // 无敌
 
         player.sendMessage("§c[DLRS-GAS] §7您尚未登录，账号已锁定")
-        player.sendMessage("§e[DLRS-GAS] §7请使用 /dlrs login 进行登录以解锁")
+        player.sendMessage("§e[DLRS-GAS] §7请使用 /gas login 进行登录以解锁")
     }
 
     /**

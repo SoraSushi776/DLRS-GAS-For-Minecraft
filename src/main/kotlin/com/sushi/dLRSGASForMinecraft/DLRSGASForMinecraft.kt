@@ -89,7 +89,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         }, 100L, 100L) // 20 ticks = 1 second, 100 ticks = 5 seconds
 
         // 注册命令（使用 registerCommand 方法）
-        registerDlrsCommand()
+        registerGasCommand()
 
         // 注册事件监听器
         val pluginManager = Bukkit.getPluginManager()
@@ -105,27 +105,27 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
     }
 
     /**
-     * 注册 DLRS 命令（使用 registerCommand 方法）
+     * 注册 GAS 命令（使用 registerCommand 方法）
      */
-    private fun registerDlrsCommand() {
+    private fun registerGasCommand() {
         // 创建一个包装类，同时支持 execute 和 suggest (tabComplete)
-        val dlrsCommand = DlrsCommand()
+        val gasCommand = GasCommand()
 
         // 使用 registerCommand 注册命令
         this.registerCommand(
-            "dlrs",
+            "gas",
             "DLRS-GAS 账号系统主命令",
-            listOf("dlrsgas", "dlrsl"),
-            dlrsCommand
+            listOf("gasl", "dlrs", "dlrsgas"),
+            gasCommand
         )
     }
 
     /**
-     * DLRS 命令实现类
+     * GAS 命令实现类
      */
-    private inner class DlrsCommand : BasicCommand {
+    private inner class GasCommand : BasicCommand {
 
-        private val bukkitCommand = object : org.bukkit.command.Command("dlrs", "", "/dlrs", listOf("dlrsgas", "dlrsl")) {
+        private val bukkitCommand = object : org.bukkit.command.Command("gas", "", "/gas", listOf("gasl", "dlrs", "dlrsgas")) {
             override fun execute(sender: CommandSender, label: String, args: Array<out String>): Boolean {
                 return commandHandler.onCommand(sender, this, label, args)
             }
@@ -137,12 +137,12 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
 
         override fun execute(source: CommandSourceStack, args: Array<String>) {
             val sender = source.sender
-            bukkitCommand.execute(sender, "dlrs", args)
+            bukkitCommand.execute(sender, "gas", args)
         }
 
         override fun suggest(source: CommandSourceStack, args: Array<String>): Collection<String> {
             val sender = source.sender
-            return bukkitCommand.tabComplete(sender, "dlrs", args)
+            return bukkitCommand.tabComplete(sender, "gas", args)
         }
     }
 
@@ -197,7 +197,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
                         event.joinMessage = null // 不显示加入消息
                         lockService.lockPlayer(player)
                         setUnloggedPlayerListName(player)
-                        player.sendMessage("§e[DLRS-GAS] §7自动登录失败，请使用 /dlrs login 进行登录")
+                        player.sendMessage("§e[DLRS-GAS] §7自动登录失败，请使用 /gas login 进行登录")
                     })
                 } else {
                     // 自动登录成功，显示正常加入消息（在 loggedPlayers 中有记录）
@@ -211,7 +211,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
                     event.joinMessage = null // 不显示加入消息
                     lockService.lockPlayer(player)
                     setUnloggedPlayerListName(player)
-                    player.sendMessage("§e[DLRS-GAS] §7请使用 /dlrs login 进行登录")
+                    player.sendMessage("§e[DLRS-GAS] §7请使用 /gas login 进行登录")
                     // 即使未登录也更新 Tab 列表显示
                     tabListService.updatePlayerTabList(player)
                 })

@@ -83,7 +83,7 @@ class DLRSAutoLoginService(private val config: DLRSConfig, private val dataServi
             }
         } else {
             player.sendMessage("§c[DLRS-GAS] §7自动登录失败，Token 已过期")
-            player.sendMessage("§e[DLRS-GAS] §7请使用 /dlrs login 重新登录")
+            player.sendMessage("§e[DLRS-GAS] §7请使用 /gas login 重新登录")
 
             // 清除过期的 token
             dataService.clearPlayerData(player.uniqueId)

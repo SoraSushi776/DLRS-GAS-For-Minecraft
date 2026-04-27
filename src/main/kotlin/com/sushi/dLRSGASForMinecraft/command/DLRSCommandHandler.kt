@@ -23,15 +23,15 @@ class DLRSCommandHandler(
     companion object {
         private const val COMMAND_USAGE = """
             §e========== DLRS-GAS 命令帮助 ==========
-            §7/dlrs login      - 登录 DLRS 账号
-            §7/dlrs logout     - 登出 DLRS 账号
-            §7/dlrs status     - 查看登录状态
-            §7/dlrs info       - 查看账号信息
-            §7/dlrs reload     - 重载插件配置 (需要 OP 权限)
-            §7/dlrs kickall    - 踢出所有玩家 (需要 OP 权限)
-            §7/dlrs logoutall  - 登出所有已登录的 GAS 账号 (需要 OP 权限)
-            §7/dlrs unbind     - 解绑 GAS 账号 (需要 OP 权限)
-            §7/dlrs bind       - 查看绑定状态 (需要 OP 权限)
+            §7/gas login      - 登录 DLRS 账号
+            §7/gas logout     - 登出 DLRS 账号
+            §7/gas status     - 查看登录状态
+            §7/gas info       - 查看账号信息
+            §7/gas reload     - 重载插件配置 (需要 OP 权限)
+            §7/gas kickall    - 踢出所有玩家 (需要 OP 权限)
+            §7/gas logoutall  - 登出所有已登录的 GAS 账号 (需要 OP 权限)
+            §7/gas unbind     - 解绑 GAS 账号 (需要 OP 权限)
+            §7/gas bind       - 查看绑定状态 (需要 OP 权限)
             §e======================================
         """
     }
@@ -68,7 +68,7 @@ class DLRSCommandHandler(
                     "unbind" -> handleUnbind(player, args.copyOf())
                     "bind" -> handleBind(player, args.copyOf())
                     else -> {
-                        player.sendMessage("§c[DLRS-GAS] §7未知命令，请使用 /dlrs 查看帮助")
+                        player.sendMessage("§c[DLRS-GAS] §7未知命令，请使用 /gas 查看帮助")
                     }
                 }
             }
@@ -84,7 +84,7 @@ class DLRSCommandHandler(
         // 检查是否已登录
         if (loginService.isLoggedIn(player)) {
             player.sendMessage("§e[DLRS-GAS] §7您已经登录过了")
-            player.sendMessage("§e[DLRS-GAS] §7如需重新登录，请先使用 /dlrs logout")
+            player.sendMessage("§e[DLRS-GAS] §7如需重新登录，请先使用 /gas logout")
             return
         }
 
@@ -112,7 +112,7 @@ class DLRSCommandHandler(
             player.sendMessage("§a[DLRS-GAS] §7当前状态：§a 已登录")
         } else {
             player.sendMessage("§c[DLRS-GAS] §7当前状态：§c 未登录")
-            player.sendMessage("§e[DLRS-GAS] §7请使用 /dlrs login 进行登录")
+            player.sendMessage("§e[DLRS-GAS] §7请使用 /gas login 进行登录")
         }
     }
 

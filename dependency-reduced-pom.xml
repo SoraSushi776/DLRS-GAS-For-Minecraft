@@ -4,7 +4,7 @@
   <groupId>com.sushi</groupId>
   <artifactId>DLRS-GAS-For-Minecraft</artifactId>
   <name>DLRS-GAS-For-Minecraft</name>
-  <version>1.0.1-4</version>
+  <version>1.0.1-5</version>
   <build>
     <sourceDirectory>${project.basedir}/src/main/kotlin</sourceDirectory>
     <defaultGoal>clean package</defaultGoal>

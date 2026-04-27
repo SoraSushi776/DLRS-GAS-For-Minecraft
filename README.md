@@ -1,6 +1,6 @@
 # DLRS-GAS For Minecraft
 
-一个 Minecraft Paper 插件，用于集成 DLRS GAS账号系统。
+一个 Minecraft Paper 插件，用于集成 DLRS GAS 账号系统。
 
 ## 功能特性
 
@@ -15,6 +15,7 @@
 - ✅ **Tab 列表自定义**（支持占位符显示 GAS 信息）
 - ✅ **配置热重载**（无需重启服务器）
 - ✅ **OP 管理命令**（踢出所有玩家、绑定查询/解绑）
+- ✅ **服务器维护状态检查**（玩家加入时同步检查）
 
 ## 安装步骤
 
@@ -54,10 +55,8 @@ login-timeout:
 
 # 服务器维护状态检查配置
 maintenance:
-  # 是否启用维护状态检查
+  # 是否启用维护状态检查（在玩家加入时检查）
   enabled: false
-  # 维护模式 API 检查间隔（秒），默认 30 秒
-  check-interval: 30
   # 自定义维护消息（当 API 不可用或返回维护状态时显示）
   custom-message: |
     &c[DLRS-GAS] 服务器正在维护中
@@ -82,24 +81,26 @@ maintenance:
 
 | 命令 | 权限 | 描述 |
 |------|------|------|
-| `/dlrs login` | 所有玩家 | 开始 DLRS 账号登录流程 |
-| `/dlrs logout` | 所有玩家 | 登出 DLRS 账号 |
-| `/dlrs status` | 所有玩家 | 查看当前登录状态 |
-| `/dlrs info` | 所有玩家 | 查看账号详细信息 |
-| `/dlrs reload` | OP | 热重载插件配置 |
-| `/dlrs kickall` | OP | 踢出所有在线玩家 |
-| `/dlrs bind [玩家/UID]` | OP | 查看绑定状态 |
-| `/dlrs unbind [玩家/UID]` | OP | 解绑 GAS 账号 |
+| `/gas login` | 所有玩家 | 开始 DLRS 账号登录流程 |
+| `/gas logout` | 所有玩家 | 登出 DLRS 账号 |
+| `/gas status` | 所有玩家 | 查看当前登录状态 |
+| `/gas info` | 所有玩家 | 查看账号详细信息 |
+| `/gas reload` | OP | 热重载插件配置 |
+| `/gas kickall` | OP | 踢出所有在线玩家 |
+| `/gas logoutall` | OP | 登出所有已登录的 GAS 账号 |
+| `/gas bind [玩家/UID]` | OP | 查看绑定状态 |
+| `/gas unbind [玩家/UID]` | OP | 解绑 GAS 账号 |
 
 ### 命令别名
+- `/gasl`
+- `/dlrs`
 - `/dlrsgas`
-- `/dlrsl`
 
 ## 使用流程
 
 ### 首次登录
 
-1. 在游戏中输入 `/dlrs login`
+1. 在游戏中输入 `/gas login`
 2. 插件会显示一个授权链接
 3. 在浏览器中打开该链接
 4. 在网页上完成 DLRS 账号登录和授权
@@ -110,11 +111,11 @@ maintenance:
 
 - 玩家首次登录成功后，access_token 会被保存
 - 下次加入服务器时，插件会自动尝试验证 token 并登录
-- 如果 token 过期，玩家需要重新执行 `/dlrs login`
+- 如果 token 过期，玩家需要重新执行 `/gas login`
 
 ### 查看信息
 
-使用 `/dlrs info` 可以查看：
+使用 `/gas info` 可以查看：
 - 用户 ID (uid)
 - 昵称 (nickname)
 - 邮箱 (email)
@@ -150,25 +151,37 @@ maintenance:
 **查看绑定状态**
 ```
 # 查看自己的绑定状态
-/dlrs bind
+/gas bind
 
 # 查看指定玩家的绑定状态
-/dlrs bind Steve
+/gas bind Steve
 
 # 查看指定 UID 的绑定状态
-/dlrs bind 12345
+/gas bind 12345
 ```
 
 **解绑账号**
 ```
 # 解绑自己的账号
-/dlrs unbind
+/gas unbind
 
 # 解绑指定玩家的账号
-/dlrs unbind Steve
+/gas unbind Steve
 
 # 解绑指定 UID 的账号
-/dlrs unbind 12345
+/gas unbind 12345
+```
+
+**登出所有玩家**
+```
+# 登出所有已登录的 GAS 账号
+/gas logoutall
+```
+
+**踢出所有玩家**
+```
+# 踢出所有在线玩家
+/gas kickall
 ```
 
 ## 技术实现
@@ -183,6 +196,8 @@ maintenance:
 - **PlayerDataService**: SQLite 数据服务，管理玩家数据和绑定关系
 - **DLRSCommandHandler**: 命令处理器
 - **TabListService**: Tab 列表管理服务
+- **PlayerLockService**: 玩家锁定服务，管理未登录玩家
+- **MaintenanceService**: 服务器维护状态检查服务
 
 ### API 端点
 
@@ -191,6 +206,7 @@ maintenance:
 - `https://api.chinadlrs.com/developer/oauth.php` - OAuth 认证
 - `https://api.chinadlrs.com/developer/profile.php` - 获取用户信息
 - `https://api.chinadlrs.com/developer/auto-login.php` - 自动登录验证
+- `https://api.chinadlrs.com/developer/maint.php` - 服务器维护状态检查
 - `https://gas.chinadlrs.com/oauth` - OAuth 授权页面
 
 ### 数据存储
@@ -231,37 +247,40 @@ bound_at TIMESTAMP
 A: 确保您已在浏览器中完成了授权流程，并且网络连接正常。
 
 ### Q: 自动登录失败怎么办？
-A: Token 可能已过期，请使用 `/dlrs logout` 然后重新登录。
+A: Token 可能已过期，请使用 `/gas logout` 然后重新登录。
 
 ### Q: 如何更改配置？
-A: 编辑 `config.yml` 后，使用 `/dlrs reload` 命令或重启服务器。
+A: 编辑 `config.yml` 后，使用 `/gas reload` 命令或重启服务器。
 
 ### Q: 支持哪些 Minecraft 版本？
 A: 本插件基于 Paper API 1.21.8+ 构建，适用于 1.21.8 及以上版本。
 
 ### Q: 玩家提示"账号已绑定至其他玩家"怎么办？
-A: 这说明该 GAS 账号已在其他玩家处绑定。如需更换绑定，请使用 OP 命令 `/dlrs unbind` 先解绑。
+A: 这说明该 GAS 账号已在其他玩家处绑定。如需更换绑定，请使用 OP 命令 `/gas unbind` 先解绑。
 
 ### Q: Tab 列表占位符不显示？
 A: 确保玩家已完成 GAS 登录。未登录玩家会显示"未登录"。
 
 ### Q: 如何设置登录超时时间？
-A: 在 `config.yml` 中修改 `login-timeout.timeout-seconds` 参数，单位为秒。设置为 `false` 可禁用超时检测。
+A: 在 `config.yml` 中修改 `login-timeout.timeout-seconds` 参数，单位为秒。超时后玩家会被自动踢出。
 
 ### Q: 登录超时后会怎样？
-A: 玩家会被自动踢出服务器，提示"登录超时，请重新尝试登录"。玩家需要重新执行 `/dlrs login` 进行登录。
+A: 玩家会被自动踢出服务器，提示"登录超时，请重新尝试登录"。玩家需要重新执行 `/gas login` 进行登录。
 
 ### Q: 如何启用服务器维护状态检查？
-A: 在 `config.yml` 中将 `maintenance.enabled` 设置为 `true`。启用后，插件会定期检查 DLRS 服务器的维护状态。
+A: 在 `config.yml` 中将 `maintenance.enabled` 设置为 `true`。启用后，插件会在玩家加入服务器时检查维护状态。
 
 ### Q: 服务器维护时玩家会怎样？
-A: 当服务器处于维护状态时，玩家尝试加入服务器会被自动踢出，并显示维护消息。可以通过 `maintenance.custom-message` 自定义维护消息。
-
-### Q: 维护状态检查频率是多少？
-A: 默认每 30 秒检查一次，可通过 `maintenance.check-interval` 参数调整。
+A: 当服务器处于维护状态时，玩家尝试加入服务器会被自动踢出，并显示维护消息，包含维护内容和预计结束时间。
 
 ### Q: 维护状态 API 返回的数据是加密的吗？
 A: 是的，DLRS 维护 API 返回的 `content` 和 `end_time` 字段是经过 AES-256-CBC 加密的。插件会自动使用你的 `app-token` 进行解密。
+
+### Q: 如何批量登出所有玩家？
+A: 使用 OP 命令 `/gas logoutall` 可以登出所有已登录 GAS 账号的玩家。
+
+### Q: 如何批量踢出所有玩家？
+A: 使用 OP 命令 `/gas kickall` 可以踢出所有在线玩家（执行命令的玩家除外）。
 
 ## 开发信息
 
