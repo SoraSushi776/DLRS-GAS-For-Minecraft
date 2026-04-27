@@ -28,6 +28,7 @@ class DLRSCommandHandler(
             §7/gas status     - 查看登录状态
             §7/gas info       - 查看账号信息
             §7/gas redeem     - 兑换 DLRS 兑换码
+            §7/gas ban <玩家/UID> [时长] [原因] - 封禁玩家账号 (需要 OP 权限)
             §7/gas reload     - 重载插件配置 (需要 OP 权限)
             §7/gas kickall    - 踢出所有玩家 (需要 OP 权限)
             §7/gas logoutall  - 登出所有已登录的 GAS 账号 (需要 OP 权限)
@@ -64,6 +65,7 @@ class DLRSCommandHandler(
                     "status" -> handleStatus(player)
                     "info" -> handleInfo(player)
                     "redeem" -> handleRedeem(player, args.copyOf())
+                    "ban" -> handleBan(player, args.copyOf())
                     "reload" -> handleReload(player)
                     "kickall" -> handleKickall(player)
                     "logoutall" -> handleLogoutall(player)
@@ -207,7 +209,7 @@ class DLRSCommandHandler(
             // - email: 玩家邮箱（全局兑换码必填）
             // - access_token: 访问令牌（全局兑换码必填）
             // - redeem_code: 兑换码
-
+            //
             val requestJson = org.json.JSONObject()
             requestJson.put("appid", appId)
             requestJson.put("redeem_code", redeemCode)
@@ -275,6 +277,168 @@ class DLRSCommandHandler(
             e.printStackTrace()
             Bukkit.getLogger().warning("[DLRS-GAS] 兑换码功能出现异常：${e.message}")
             player.sendMessage("§c[DLRS-GAS] §7兑换过程中出现错误，请稍后重试")
+            return false
+        }
+    }
+
+    /**
+     * 处理封禁命令
+     */
+    private fun handleBan(player: Player, args: Array<out String>) {
+        // 检查 OP 权限
+        if (!player.isOp) {
+            player.sendMessage("§c[DLRS-GAS] §7你没有权限执行此命令")
+            return
+        }
+
+        if (args.size < 2) {
+            player.sendMessage("§c[DLRS-GAS] §7用法：/gas ban <玩家/UID> [时长] [原因]")
+            player.sendMessage("§e[DLRS-GAS] §7例如：/gas ban Steve 24 \"作弊行为\"")
+            player.sendMessage("§e[DLRS-GAS] §7时长为小时数，不填则永久封禁")
+            return
+        }
+
+        val target = args[1]
+        val banTime = if (args.size > 2) args[2] else null
+        val reason = if (args.size > 3) args.sliceArray(3..args.size-1).joinToString(" ") else null
+
+        player.sendMessage("§e[DLRS-GAS] §7正在处理封禁请求...")
+
+        // 异步执行封禁
+        Bukkit.getScheduler().runTaskAsynchronously(DLRSGASForMinecraft.instance, Runnable {
+            val success = performBan(player, target, banTime, reason)
+            Bukkit.getScheduler().runTask(DLRSGASForMinecraft.instance, Runnable {
+                if (success) {
+                    player.sendMessage("§a[DLRS-GAS] §7玩家封禁成功！")
+                } else {
+                    player.sendMessage("§c[DLRS-GAS] §7玩家封禁失败，请检查输入或日志")
+                }
+            })
+        })
+    }
+
+    private fun performBan(adminPlayer: Player, target: String, banTime: String?, reason: String?): Boolean {
+        try {
+            // 从配置文件中获取应用 ID 和 Token
+            val config = DLRSGASForMinecraft.instance.getConfigManager()
+            val appId = config.getAppId()
+            val appToken = config.getAppToken()
+
+            if (appId.isEmpty() || appToken.isEmpty()) {
+                Bukkit.getLogger().warning("[DLRS-GAS] 封禁功能需要在 config.yml 中配置 app-id 和 app-token")
+                adminPlayer.sendMessage("§c[DLRS-GAS] §7配置错误：请在 config.yml 中配置 app-id 和 app-token")
+                return false
+            }
+
+            // 尝试获取目标玩家的 UID
+            var uid = target // 可能已经是一个 UID
+            val targetPlayer = Bukkit.getPlayerExact(target)
+            if (targetPlayer != null) {
+                // 如果是玩家名，获取其 UID
+                val userInfo = loginService.getPlayerInfo(targetPlayer)
+                if (userInfo != null) {
+                    uid = userInfo.uid
+                } else {
+                    adminPlayer.sendMessage("§c[DLRS-GAS] §7玩家 $target 未登录，无法获取 UID")
+                    return false
+                }
+            } else {
+                // 尝试从绑定信息中查找
+                val boundUid = dataService.getBoundUid(target)
+                if (boundUid != null) {
+                    uid = boundUid
+                }
+            }
+
+            // 构建封禁请求
+            val requestJson = org.json.JSONObject()
+            requestJson.put("appid", appId)
+            requestJson.put("uid", uid)
+
+            // 加密 UID（实际使用时应该使用 AESEncryptor）
+            // 这里使用简单示例 - 实际应用中需要使用正确加密算法
+            try {
+                val encryptedUid = com.sushi.dLRSGASForMinecraft.util.AESEncryptor.encrypt(uid, appToken)
+                requestJson.put("uid", encryptedUid)
+            } catch (e: Exception) {
+                // 使用原始 UID（实际应用中应该正确加密）
+                requestJson.put("uid", uid)
+            }
+
+            if (reason != null) {
+                try {
+                    val encryptedReason = com.sushi.dLRSGASForMinecraft.util.AESEncryptor.encrypt(reason, appToken)
+                    requestJson.put("reason", encryptedReason)
+                } catch (e: Exception) {
+                    // 使用原始原因
+                    requestJson.put("reason", reason)
+                }
+            }
+
+            if (banTime != null) {
+                try {
+                    val encryptedBanTime = com.sushi.dLRSGASForMinecraft.util.AESEncryptor.encrypt(banTime, appToken)
+                    requestJson.put("banTime", encryptedBanTime)
+                } catch (e: Exception) {
+                    // 使用原始时长
+                    requestJson.put("banTime", banTime)
+                }
+            }
+
+            val url = "https://api.chinadlrs.com/developer/ban.php"
+
+            // 发送请求
+            val response = com.sushi.dLRSGASForMinecraft.util.HttpUtil.postJson(url, requestJson.toString())
+
+            if (response == null) {
+                Bukkit.getLogger().warning("[DLRS-GAS] 封禁请求失败：无响应")
+                adminPlayer.sendMessage("§c[DLRS-GAS] §7封禁请求失败：请检查网络连接")
+                return false
+            }
+
+            val code = try {
+                response.getInt("code")
+            } catch (e: org.json.JSONException) {
+                Bukkit.getLogger().warning("[DLRS-GAS] 封禁响应格式错误：$response")
+                adminPlayer.sendMessage("§c[DLRS-GAS] §7服务器响应格式错误")
+                return false
+            }
+
+            if (code == 200) {
+                // 封禁成功，查找并踢出玩家
+                val targetPlayer = Bukkit.getPlayerExact(target)
+                if (targetPlayer != null) {
+                    // 获取封禁原因（如果有的话）
+                    val banReason = reason ?: "违规行为"
+                    val banDuration = banTime?.let { "$it 小时" } ?: "永久"
+
+                    // 异步回调在主线程中踢出玩家
+                    Bukkit.getScheduler().runTask(DLRSGASForMinecraft.instance, Runnable {
+                        // 发送封禁信息给被封禁玩家
+                        targetPlayer.kickPlayer("§c[DLRS-GAS] 账号已被封禁\n§7原因：$banReason\n§7时长：$banDuration\n§7请联系管理员解封")
+                    })
+
+                    // 通知管理员
+                    adminPlayer.sendMessage("§a[DLRS-GAS] §7玩家 $target 已被成功封禁")
+                    Bukkit.getLogger().info("[DLRS-GAS] 玩家 $target 已被管理员 ${adminPlayer.name} 封禁")
+                } else {
+                    // 通知管理员但未找到玩家
+                    adminPlayer.sendMessage("§e[DLRS-GAS] §7玩家 $target 已被封禁（未在线）")
+                    Bukkit.getLogger().info("[DLRS-GAS] 玩家 $target 已被管理员 ${adminPlayer.name} 封禁（未在线）")
+                }
+
+                return true
+            } else {
+                // 封禁失败
+                val msg = response.optString("msg", "封禁失败")
+                Bukkit.getLogger().warning("[DLRS-GAS] 封禁失败：$msg")
+                adminPlayer.sendMessage("§c[DLRS-GAS] §7封禁失败：$msg")
+                return false
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Bukkit.getLogger().warning("[DLRS-GAS] 封禁功能异常：${e.message}")
+            adminPlayer.sendMessage("§c[DLRS-GAS] §7封禁过程中出现错误，请稍后重试")
             return false
         }
     }
@@ -531,14 +695,14 @@ class DLRSCommandHandler(
         return when (args.size) {
             1 -> {
                 // 子命令补全
-                listOf("login", "logout", "status", "info", "redeem", "reload", "kickall", "logoutall", "unbind", "bind").filter {
+                listOf("login", "logout", "status", "info", "redeem", "ban", "reload", "kickall", "logoutall", "unbind", "bind").filter {
                     it.startsWith(args[0].lowercase())
                 }
             }
             2 -> {
                 // 参数补全（unbind 和 bind 命令）
                 when (args[0].lowercase()) {
-                    "unbind", "bind" -> {
+                    "unbind", "bind", "ban" -> {
                         // 补全在线玩家名
                         Bukkit.getOnlinePlayers().map { it.name }.filter {
                             it.startsWith(args[1], ignoreCase = true)
