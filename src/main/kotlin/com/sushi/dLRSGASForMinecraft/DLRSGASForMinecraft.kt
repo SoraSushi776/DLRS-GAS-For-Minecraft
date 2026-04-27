@@ -2,6 +2,7 @@ package com.sushi.dLRSGASForMinecraft
 
 import com.sushi.dLRSGASForMinecraft.command.DLRSCommandHandler
 import com.sushi.dLRSGASForMinecraft.config.DLRSConfig
+import com.sushi.dLRSGASForMinecraft.listener.PlayerCommandInterceptor
 import com.sushi.dLRSGASForMinecraft.listener.PlayerLockListener
 import com.sushi.dLRSGASForMinecraft.service.DLRSAutoLoginService
 import com.sushi.dLRSGASForMinecraft.service.DLRSLoginService
@@ -35,6 +36,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
     private lateinit var lockListener: PlayerLockListener
     private lateinit var tabListService: TabListService
     private lateinit var maintenanceService: MaintenanceService
+    private lateinit var commandInterceptor: PlayerCommandInterceptor
 
     companion object {
         lateinit var instance: DLRSGASForMinecraft
@@ -80,6 +82,9 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         maintenanceService = MaintenanceService(config)
         maintenanceService.initialize()
 
+        // 初始化命令拦截器（阻止未登录玩家执行其他插件命令）
+        commandInterceptor = PlayerCommandInterceptor(loginService)
+
         // 获取维护状态（用于初始化时检查）
         val maintenanceMsg = maintenanceService.getMaintenanceMessage()
 
@@ -95,6 +100,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         val pluginManager = Bukkit.getPluginManager()
         pluginManager.registerEvents(this, this)
         pluginManager.registerEvents(lockListener, this)
+        pluginManager.registerEvents(commandInterceptor, this)
 
         // 输出启动信息
         logger.info("§a========================================")

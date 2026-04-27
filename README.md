@@ -16,6 +16,9 @@
 - ✅ **配置热重载**（无需重启服务器）
 - ✅ **OP 管理命令**（踢出所有玩家、绑定查询/解绑）
 - ✅ **服务器维护状态检查**（玩家加入时同步检查）
+- ✅ **兑换码功能**（支持 DLRS 兑换码核销）
+- ✅ **登录保护**（未登录状态下禁止使用大部分指令）
+- ✅ **全局命令拦截**（未登录玩家无法执行其他插件的命令）
 
 ## 安装步骤
 
@@ -79,17 +82,20 @@ maintenance:
 
 ## 命令列表
 
-| 命令 | 权限 | 描述 |
-|------|------|------|
-| `/gas login` | 所有玩家 | 开始 DLRS 账号登录流程 |
-| `/gas logout` | 所有玩家 | 登出 DLRS 账号 |
-| `/gas status` | 所有玩家 | 查看当前登录状态 |
-| `/gas info` | 所有玩家 | 查看账号详细信息 |
-| `/gas reload` | OP | 热重载插件配置 |
-| `/gas kickall` | OP | 踢出所有在线玩家 |
-| `/gas logoutall` | OP | 登出所有已登录的 GAS 账号 |
-| `/gas bind [玩家/UID]` | OP | 查看绑定状态 |
-| `/gas unbind [玩家/UID]` | OP | 解绑 GAS 账号 |
+| 命令 | 权限 | 登录要求 | 描述 |
+|------|------|----------|------|
+| `/gas login` | 所有玩家 | ❌ 无需登录 | 开始 DLRS 账号登录流程 |
+| `/gas logout` | 所有玩家 | ✅ 需登录 | 登出 DLRS 账号 |
+| `/gas status` | 所有玩家 | ❌ 无需登录 | 查看当前登录状态 |
+| `/gas info` | 所有玩家 | ✅ 需登录 | 查看账号详细信息 |
+| `/gas redeem <兑换码>` | 所有玩家 | ✅ 需登录 | 兑换 DLRS 兑换码 |
+| `/gas reload` | OP | ❌ 无需登录 | 热重载插件配置 |
+| `/gas kickall` | OP | ❌ 无需登录 | 踢出所有在线玩家 |
+| `/gas logoutall` | OP | ❌ 无需登录 | 登出所有已登录的 GAS 账号 |
+| `/gas bind [玩家/UID]` | OP | ✅ 需登录 | 查看绑定状态 |
+| `/gas unbind [玩家/UID]` | OP | ✅ 需登录 | 解绑 GAS 账号 |
+
+> **注意**: 从 v1.0.1-6 版本开始，大部分命令需要玩家先登录才能使用。这是为了保护账号安全，防止未授权访问。
 
 ### 命令别名
 - `/gasl`
@@ -121,6 +127,18 @@ maintenance:
 - 邮箱 (email)
 - 用户组 (user_group)
 - 头像 URL (avatar_url)
+
+### 兑换码
+
+使用 `/gas redeem <兑换码>` 可以兑换 DLRS 兑换码：
+- 需要先登录 GAS 账号
+- 兑换成功会将奖励内容输出到聊天栏
+- 兑换失败会提示错误信息
+- 支持全局兑换码和单次兑换码
+
+```
+/gas redeem ABCD-EFGH-IJKL-MNOP
+```
 
 ## 账号绑定系统
 
@@ -207,6 +225,7 @@ maintenance:
 - `https://api.chinadlrs.com/developer/profile.php` - 获取用户信息
 - `https://api.chinadlrs.com/developer/auto-login.php` - 自动登录验证
 - `https://api.chinadlrs.com/developer/maint.php` - 服务器维护状态检查
+- `https://api.chinadlrs.com/developer/redeem.php` - 兑换码核销
 - `https://gas.chinadlrs.com/oauth` - OAuth 授权页面
 
 ### 数据存储
@@ -240,6 +259,7 @@ bound_at TIMESTAMP
 3. **Token 管理**: access_token 本地存储，定期验证有效性
 4. **加密传输**: appToken 在传输前使用 AES-256-CBC 加密
 5. **账号绑定**: 防止 GAS 账号被多个玩家共享使用
+6. **登录保护**: 未登录玩家无法使用敏感命令
 
 ## 常见问题
 
@@ -281,6 +301,15 @@ A: 使用 OP 命令 `/gas logoutall` 可以登出所有已登录 GAS 账号的�
 
 ### Q: 如何批量踢出所有玩家？
 A: 使用 OP 命令 `/gas kickall` 可以踢出所有在线玩家（执行命令的玩家除外）。
+
+### Q: 为什么我使用命令时提示需要登录？
+A: 从 v1.0.1-6 版本开始，大部分命令（如 `/gas info`、`/gas redeem` 等）需要玩家先登录才能使用。这是为了保护账号安全。只有 `/gas login`、`/gas status` 等少数命令可以在未登录状态下使用。
+
+### Q: 兑换码如何使用？
+A: 使用 `/gas redeem <兑换码>` 命令兑换。需要先登录 GAS 账号，兑换成功后奖励内容会显示在聊天栏中。
+
+### Q: 为什么我不能使用其他插件的命令？
+A: 从 v1.0.1-7 版本开始，插件增加了全局命令拦截功能。未登录 GAS 账号的玩家无法执行其他插件的命令（如 `/tp`、`/spawn` 等）。这是为了强制玩家登录，保障账号安全。只有白名单中的命令（如 `/help`、`/version`、`/plugins` 等基础命令）可以在未登录状态下使用。
 
 ## 开发信息
 

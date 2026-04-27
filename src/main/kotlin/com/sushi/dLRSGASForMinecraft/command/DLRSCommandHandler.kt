@@ -27,6 +27,7 @@ class DLRSCommandHandler(
             §7/gas logout     - 登出 DLRS 账号
             §7/gas status     - 查看登录状态
             §7/gas info       - 查看账号信息
+            §7/gas redeem     - 兑换 DLRS 兑换码
             §7/gas reload     - 重载插件配置 (需要 OP 权限)
             §7/gas kickall    - 踢出所有玩家 (需要 OP 权限)
             §7/gas logoutall  - 登出所有已登录的 GAS 账号 (需要 OP 权限)
@@ -62,6 +63,7 @@ class DLRSCommandHandler(
                     "logout" -> handleLogout(player)
                     "status" -> handleStatus(player)
                     "info" -> handleInfo(player)
+                    "redeem" -> handleRedeem(player, args.copyOf())
                     "reload" -> handleReload(player)
                     "kickall" -> handleKickall(player)
                     "logoutall" -> handleLogoutall(player)
@@ -74,6 +76,18 @@ class DLRSCommandHandler(
             }
         }
 
+        return true
+    }
+
+    /**
+     * 检查玩家是否已登录，未登录则提示
+     */
+    private fun checkLoggedIn(player: Player, commandName: String): Boolean {
+        if (!loginService.isLoggedIn(player)) {
+            player.sendMessage("§c[DLRS-GAS] §7您尚未登录，无法使用 $commandName 命令")
+            player.sendMessage("§e[DLRS-GAS] §7请使用 /gas login 进行登录")
+            return false
+        }
         return true
     }
 
@@ -120,6 +134,8 @@ class DLRSCommandHandler(
      * 处理信息查询命令
      */
     private fun handleInfo(player: Player) {
+        if (!checkLoggedIn(player, "info")) return
+
         val userInfo = loginService.getPlayerInfo(player)
 
         if (userInfo == null) {
@@ -134,6 +150,133 @@ class DLRSCommandHandler(
         player.sendMessage("§7用户组：§f${userInfo.userGroup}")
         player.sendMessage("§7头像：§f${userInfo.avatarUrl}")
         player.sendMessage("§e======================================")
+    }
+
+    /**
+     * 处理兑换命令
+     */
+    private fun handleRedeem(player: Player, args: Array<out String>) {
+        if (args.size < 2) {
+            player.sendMessage("§c[DLRS-GAS] §7用法：/gas redeem <兑换码>")
+            player.sendMessage("§e[DLRS-GAS] §7例如：/gas redeem ABCD-EFGH-IJKL-MNOP")
+            return
+        }
+
+        // 检查是否已登录
+        if (!checkLoggedIn(player, "redeem")) return
+
+        val redeemCode = args[1]
+        player.sendMessage("§e[DLRS-GAS] §7正在兑换兑换码...")
+
+        // 异步执行兑换
+        Bukkit.getScheduler().runTaskAsynchronously(DLRSGASForMinecraft.instance, Runnable {
+            // 调用兑换接口
+            val success = performRedeem(player, redeemCode)
+            Bukkit.getScheduler().runTask(DLRSGASForMinecraft.instance, Runnable {
+                if (success) {
+                    player.sendMessage("§a[DLRS-GAS] §7兑换码兑换成功！")
+                } else {
+                    player.sendMessage("§c[DLRS-GAS] §7兑换码兑换失败，请检查兑换码是否正确")
+                }
+            })
+        })
+    }
+
+    private fun performRedeem(player: Player, redeemCode: String): Boolean {
+        try {
+            // 从配置文件中获取应用 ID 和 Token
+            val config = DLRSGASForMinecraft.instance.getConfigManager()
+            val appId = config.getAppId()
+            val appToken = config.getAppToken()
+
+            if (appId.isEmpty() || appToken.isEmpty()) {
+                Bukkit.getLogger().warning("[DLRS-GAS] 兑换码功能需要在 config.yml 中配置 app-id 和 app-token")
+                player.sendMessage("§c[DLRS-GAS] §7配置错误：请在 config.yml 中配置 app-id 和 app-token")
+                return false
+            }
+
+            // 获取玩家的登录信息（用于全局兑换码）
+            val userInfo = loginService.getPlayerInfo(player)
+            val email = userInfo?.email ?: ""
+            val accessToken = userInfo?.accessToken ?: ""
+
+            // 构建兑换请求
+            // 发送到 https://api.chinadlrs.com/developer/redeem.php
+            // 参数：
+            // - appid: 应用 ID
+            // - email: 玩家邮箱（全局兑换码必填）
+            // - access_token: 访问令牌（全局兑换码必填）
+            // - redeem_code: 兑换码
+
+            val requestJson = org.json.JSONObject()
+            requestJson.put("appid", appId)
+            requestJson.put("redeem_code", redeemCode)
+
+            // 如果玩家已登录，添加 email 和 access_token（用于全局兑换码）
+            if (userInfo != null && email.isNotEmpty() && accessToken.isNotEmpty()) {
+                requestJson.put("email", email)
+                requestJson.put("access_token", accessToken)
+            }
+
+            val url = "https://api.chinadlrs.com/developer/redeem.php"
+
+            // 直接调用 HttpUtil.postJson 方法
+            val response = com.sushi.dLRSGASForMinecraft.util.HttpUtil.postJson(url, requestJson.toString())
+
+            // 检查返回结果
+            if (response == null) {
+                Bukkit.getLogger().warning("[DLRS-GAS] 兑换码请求失败：无响应")
+                player.sendMessage("§c[DLRS-GAS] §7兑换请求失败：请检查网络连接")
+                return false
+            }
+
+            // 安全获取响应码
+            val code = try {
+                response.getInt("code")
+            } catch (e: org.json.JSONException) {
+                Bukkit.getLogger().warning("[DLRS-GAS] 兑换码响应格式错误：$response")
+                player.sendMessage("§c[DLRS-GAS] §7服务器响应格式错误")
+                return false
+            }
+
+            if (code == 200) {
+                // 兑换成功，获取奖励信息
+                try {
+                    val data = response.getJSONObject("data")
+
+                    // 解密兑换内容（data.content 是加密的）
+                    val encryptedContent = data.optString("content", "")
+
+                    val decryptedContent = try {
+                        com.sushi.dLRSGASForMinecraft.util.AESEncryptor.decrypt(encryptedContent, appToken)
+                    } catch (e: Exception) {
+                        encryptedContent
+                    }
+
+                    // 将兑换码内容输出到聊天栏
+                    player.sendMessage("§e[DLRS-GAS] §7=== 兑换码内容 ===")
+                    player.sendMessage("§e[DLRS-GAS] §7奖励内容：$decryptedContent")
+                    player.sendMessage("§e[DLRS-GAS] §7================ ")
+
+                    return true
+                } catch (e: org.json.JSONException) {
+                    Bukkit.getLogger().warning("[DLRS-GAS] 兑换码数据格式错误：${response.toString()}")
+                    player.sendMessage("§c[DLRS-GAS] §7服务器响应格式错误")
+                    return false
+                }
+            } else {
+                // 兑换失败
+                val msg = response.optString("msg", "兑换失败")
+                Bukkit.getLogger().warning("[DLRS-GAS] 兑换失败：$msg")
+                player.sendMessage("§c[DLRS-GAS] §7兑换失败：$msg")
+                return false
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Bukkit.getLogger().warning("[DLRS-GAS] 兑换码功能出现异常：${e.message}")
+            player.sendMessage("§c[DLRS-GAS] §7兑换过程中出现错误，请稍后重试")
+            return false
+        }
     }
 
     /**
@@ -263,6 +406,8 @@ class DLRSCommandHandler(
         }
 
         // 无参数，解绑自己
+        if (!checkLoggedIn(player, "unbind")) return
+
         val userInfo = loginService.getPlayerInfo(player)
         if (userInfo == null) {
             player.sendMessage("§c[DLRS-GAS] §7您尚未登录，无法解绑")
@@ -308,6 +453,8 @@ class DLRSCommandHandler(
 
         // 如果没有参数，显示自己的绑定状态
         if (args.size < 2) {
+            if (!checkLoggedIn(player, "bind")) return
+
             val userInfo = loginService.getPlayerInfo(player)
             if (userInfo == null) {
                 player.sendMessage("§c[DLRS-GAS] §7您尚未登录，无法查看绑定状态")
@@ -384,7 +531,7 @@ class DLRSCommandHandler(
         return when (args.size) {
             1 -> {
                 // 子命令补全
-                listOf("login", "logout", "status", "info", "reload", "kickall", "logoutall", "unbind", "bind").filter {
+                listOf("login", "logout", "status", "info", "redeem", "reload", "kickall", "logoutall", "unbind", "bind").filter {
                     it.startsWith(args[0].lowercase())
                 }
             }
