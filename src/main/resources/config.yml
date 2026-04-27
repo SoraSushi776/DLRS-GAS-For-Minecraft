@@ -33,6 +33,15 @@ login-timeout:
   # 超时时间（秒），默认 60 秒
   timeout-seconds: 60
 
+# 服务器维护状态检查配置
+maintenance:
+  # 是否启用维护状态检查（在玩家加入时检查）
+  enabled: false
+  # 自定义维护消息（当 API 返回维护状态时显示）
+  custom-message: |
+    &c[DLRS-GAS] 服务器正在维护中
+    &e请稍后再试！
+
 # 玩家数据存储
 # 玩家登录信息将自动存储在 players 节点下
 # 无需手动修改

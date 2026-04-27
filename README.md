@@ -51,6 +51,17 @@ login-timeout:
   enabled: true
   # 超时时间（秒），默认 60 秒
   timeout-seconds: 60
+
+# 服务器维护状态检查配置
+maintenance:
+  # 是否启用维护状态检查
+  enabled: false
+  # 维护模式 API 检查间隔（秒），默认 30 秒
+  check-interval: 30
+  # 自定义维护消息（当 API 不可用或返回维护状态时显示）
+  custom-message: |
+    &c[DLRS-GAS] 服务器正在维护中
+    &e请稍后再试！
 ```
 
 **重要**: 您需要从 DLRS 开发者后台获取 `app-id` 和 `app-token` 才能使用此插件。
@@ -239,6 +250,18 @@ A: 在 `config.yml` 中修改 `login-timeout.timeout-seconds` 参数，单位为
 
 ### Q: 登录超时后会怎样？
 A: 玩家会被自动踢出服务器，提示"登录超时，请重新尝试登录"。玩家需要重新执行 `/dlrs login` 进行登录。
+
+### Q: 如何启用服务器维护状态检查？
+A: 在 `config.yml` 中将 `maintenance.enabled` 设置为 `true`。启用后，插件会定期检查 DLRS 服务器的维护状态。
+
+### Q: 服务器维护时玩家会怎样？
+A: 当服务器处于维护状态时，玩家尝试加入服务器会被自动踢出，并显示维护消息。可以通过 `maintenance.custom-message` 自定义维护消息。
+
+### Q: 维护状态检查频率是多少？
+A: 默认每 30 秒检查一次，可通过 `maintenance.check-interval` 参数调整。
+
+### Q: 维护状态 API 返回的数据是加密的吗？
+A: 是的，DLRS 维护 API 返回的 `content` 和 `end_time` 字段是经过 AES-256-CBC 加密的。插件会自动使用你的 `app-token` 进行解密。
 
 ## 开发信息
 

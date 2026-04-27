@@ -23,14 +23,15 @@ class DLRSCommandHandler(
     companion object {
         private const val COMMAND_USAGE = """
             §e========== DLRS-GAS 命令帮助 ==========
-            §7/dlrs login     - 登录 DLRS 账号
-            §7/dlrs logout    - 登出 DLRS 账号
-            §7/dlrs status    - 查看登录状态
-            §7/dlrs info      - 查看账号信息
-            §7/dlrs reload    - 重载插件配置 (需要 OP 权限)
-            §7/dlrs kickall   - 踢出所有玩家 (需要 OP 权限)
-            §7/dlrs unbind    - 解绑 GAS 账号 (需要 OP 权限)
-            §7/dlrs bind      - 查看绑定状态 (需要 OP 权限)
+            §7/dlrs login      - 登录 DLRS 账号
+            §7/dlrs logout     - 登出 DLRS 账号
+            §7/dlrs status     - 查看登录状态
+            §7/dlrs info       - 查看账号信息
+            §7/dlrs reload     - 重载插件配置 (需要 OP 权限)
+            §7/dlrs kickall    - 踢出所有玩家 (需要 OP 权限)
+            §7/dlrs logoutall  - 登出所有已登录的 GAS 账号 (需要 OP 权限)
+            §7/dlrs unbind     - 解绑 GAS 账号 (需要 OP 权限)
+            §7/dlrs bind       - 查看绑定状态 (需要 OP 权限)
             §e======================================
         """
     }
@@ -63,6 +64,7 @@ class DLRSCommandHandler(
                     "info" -> handleInfo(player)
                     "reload" -> handleReload(player)
                     "kickall" -> handleKickall(player)
+                    "logoutall" -> handleLogoutall(player)
                     "unbind" -> handleUnbind(player, args.copyOf())
                     "bind" -> handleBind(player, args.copyOf())
                     else -> {
@@ -181,6 +183,35 @@ class DLRSCommandHandler(
         }
 
         player.sendMessage("§a[DLRS-GAS] §7已踢出所有玩家!")
+    }
+
+    /**
+     * 处理登出所有玩家命令
+     */
+    private fun handleLogoutall(player: Player) {
+        // 检查 OP 权限
+        if (!player.isOp) {
+            player.sendMessage("§c[DLRS-GAS] §7你没有权限执行此命令")
+            return
+        }
+
+        val loggedPlayers = Bukkit.getOnlinePlayers().filter { p ->
+            loginService.isLoggedIn(p)
+        }
+
+        if (loggedPlayers.isEmpty()) {
+            player.sendMessage("§e[DLRS-GAS] §7当前没有已登录的玩家")
+            return
+        }
+
+        val count = loggedPlayers.size
+        player.sendMessage("§e[DLRS-GAS] §7正在登出所有已登录的玩家 ($count 人)...")
+
+        loggedPlayers.forEach { p ->
+            autoLoginService.logout(p)
+        }
+
+        player.sendMessage("§a[DLRS-GAS] §7已登出所有玩家!")
     }
 
     /**
@@ -353,7 +384,7 @@ class DLRSCommandHandler(
         return when (args.size) {
             1 -> {
                 // 子命令补全
-                listOf("login", "logout", "status", "info", "reload", "kickall", "unbind", "bind").filter {
+                listOf("login", "logout", "status", "info", "reload", "kickall", "logoutall", "unbind", "bind").filter {
                     it.startsWith(args[0].lowercase())
                 }
             }

@@ -5,6 +5,7 @@ import com.sushi.dLRSGASForMinecraft.config.DLRSConfig
 import com.sushi.dLRSGASForMinecraft.listener.PlayerLockListener
 import com.sushi.dLRSGASForMinecraft.service.DLRSAutoLoginService
 import com.sushi.dLRSGASForMinecraft.service.DLRSLoginService
+import com.sushi.dLRSGASForMinecraft.service.MaintenanceService
 import com.sushi.dLRSGASForMinecraft.service.PlayerDataService
 import com.sushi.dLRSGASForMinecraft.service.PlayerLockService
 import com.sushi.dLRSGASForMinecraft.service.TabListService
@@ -33,6 +34,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
     private lateinit var commandHandler: DLRSCommandHandler
     private lateinit var lockListener: PlayerLockListener
     private lateinit var tabListService: TabListService
+    private lateinit var maintenanceService: MaintenanceService
 
     companion object {
         lateinit var instance: DLRSGASForMinecraft
@@ -73,6 +75,13 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         // 初始化 Tab 列表服务
         tabListService = TabListService(this)
         tabListService.initialize()
+
+        // 初始化维护状态检查服务
+        maintenanceService = MaintenanceService(config)
+        maintenanceService.initialize()
+
+        // 获取维护状态（用于初始化时检查）
+        val maintenanceMsg = maintenanceService.getMaintenanceMessage()
 
         // 启动定时任务，每 5 秒更新一次所有玩家的 Tab 列表
         Bukkit.getScheduler().runTaskTimer(this, Runnable {
@@ -150,6 +159,9 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         // 关闭数据库连接
         dataService.shutdown()
 
+        // 关闭维护状态检查服务
+        maintenanceService.shutdown()
+
         // 输出关闭信息
         logger.info("§c========================================")
         logger.info("§c  DLRS-GAS For Minecraft 插件已禁用!")
@@ -162,6 +174,17 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     fun onPlayerJoin(event: PlayerJoinEvent) {
         val player = event.player
+
+        // 检查维护状态（在登录前，同步检查）
+        val (isMaintaining, maintMsg) = maintenanceService.checkMaintenanceStatusSync()
+        if (isMaintaining) {
+            Bukkit.getScheduler().scheduleSyncDelayedTask(this, Runnable {
+                player.kickPlayer(convertColorCodes(maintMsg))
+            }, 1L)
+            event.joinMessage = null
+            logger.info("[DLRS-GAS] 玩家 ${player.name} 尝试加入，但服务器正在维护中")
+            return
+        }
 
         // 异步执行自动登录
         Bukkit.getScheduler().runTaskAsynchronously(this, Runnable {
@@ -194,6 +217,13 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
                 })
             }
         })
+    }
+
+    /**
+     * 转换颜色代码
+     */
+    private fun convertColorCodes(text: String): String {
+        return text.replace('&', '§')
     }
 
     /**
@@ -256,6 +286,11 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
 
             // 重新初始化 Tab 列表服务
             tabListService.reload()
+
+            // 重新初始化维护状态检查服务
+            maintenanceService.shutdown()
+            maintenanceService = MaintenanceService(config)
+            maintenanceService.initialize()
 
             logger.info("§a[DLRS-GAS] 配置已成功重载!")
             true
