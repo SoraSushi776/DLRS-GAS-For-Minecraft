@@ -67,16 +67,8 @@ class MaintenanceService(private val config: DLRSConfig) {
                         encryptedEndTime
                     }
 
-                    // 构建完整的维护消息
-                    val maintMsg = buildString {
-                        appendLine("&c&l[DLRS-GAS] 服务器正在维护中！")
-                        appendLine()
-                        appendLine("&e维护信息：")
-                        appendLine(decryptedMessage.ifEmpty { "&7暂无详细说明" })
-                        appendLine()
-                        appendLine("&e维护结束时间：")
-                        appendLine(decryptedEndTime.ifEmpty { "&7暂未公布" })
-                    }
+                    // 构建完整的维护消息（使用 \n 作为行分隔符，Minecraft kick 消息需要）
+                    val maintMsg = "&c&l[DLRS-GAS] 服务器正在维护中！\n\n&e 维护信息：\n${decryptedMessage.ifEmpty { "&7 暂无详细说明" }}\n\n&e 维护结束时间：\n${decryptedEndTime.ifEmpty { "&7 暂未公布" }}"
 
                     return Pair(true, maintMsg)
                 } else if (code == 201) {
