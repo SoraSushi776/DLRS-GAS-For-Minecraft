@@ -11,7 +11,11 @@ import org.bukkit.entity.Player
  * DLRS 自动登录服务
  * 使用 access_token 进行快速登录
  */
-class DLRSAutoLoginService(private val config: DLRSConfig, private val dataService: PlayerDataService) {
+class DLRSAutoLoginService(
+    private val config: DLRSConfig,
+    private val dataService: PlayerDataService,
+    private val doublePasswordService: DoublePasswordService
+) {
 
     companion object {
         private const val AUTO_LOGIN_API_URL = "https://api.chinadlrs.com/developer/auto-login.php"
@@ -61,10 +65,20 @@ class DLRSAutoLoginService(private val config: DLRSConfig, private val dataServi
                 player.sendMessage("§a[DLRS-GAS] §7自动登录成功！")
                 player.sendMessage("§a[DLRS-GAS] §7欢迎回来，§f${updatedUserInfo.nickname}§7!")
 
-                // 解锁玩家并设置权限
-                DLRSGASForMinecraft.lockServiceInstance.unlockPlayer(player)
-                DLRSGASForMinecraft.lockServiceInstance.setPlayerPermissions(player, updatedUserInfo)
-                DLRSGASForMinecraft.lockServiceInstance.setPlayerDisplayName(player, updatedUserInfo)
+                // 在主线程中锁定玩家并设置权限（Bukkit API 必须在主线程调用）
+                Bukkit.getScheduler().runTask(
+                    DLRSGASForMinecraft.instance,
+                    Runnable {
+                        // 立即锁定玩家，等验证双重密码解锁（不发送锁定消息，因为已经自动登录成功）
+                        DLRSGASForMinecraft.lockServiceInstance.lockPlayer(player, sendMessage = false)
+                        // 为有权限的玩家设权限
+                        DLRSGASForMinecraft.lockServiceInstance.setPlayerPermissions(player, updatedUserInfo)
+                        DLRSGASForMinecraft.lockServiceInstance.setPlayerDisplayName(player, updatedUserInfo)
+
+                        // 处理双重密码验证（在自动登录成功后，仍然需要验证双重密码才能解锁）
+                        doublePasswordService.handleDoublePasswordVerification(player, updatedUserInfo)
+                    }
+                )
 
                 // 发送加入消息
                 Bukkit.getScheduler().scheduleSyncDelayedTask(

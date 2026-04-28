@@ -1,54 +1,265 @@
 # DLRS-GAS For Minecraft
 
-一个 Minecraft Paper 插件，用于集成 DLRS GAS 账号系统。
+<p align="center">
+  <b>一个为 Minecraft 服务器提供 DLRS-GAS 账号系统集成的高性能插件</b>
+</p>
 
-## 功能特性
+<p align="center">
+  <img src="https://img.shields.io/badge/Version-1.0.3--7-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Minecraft-1.21+-brightgreen.svg" alt="Minecraft">
+  <img src="https://img.shields.io/badge/Paper-1.21.8-orange.svg" alt="Paper">
+  <img src="https://img.shields.io/badge/Kotlin-2.3.21-purple.svg" alt="Kotlin">
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
+</p>
 
-- ✅ OAuth 2.0 授权登录
-- ✅ 自动登录支持（使用 access_token）
-- ✅ AES-256-CBC 加密保护应用密钥
-- ✅ 玩家数据持久化存储（SQLite）
-- ✅ 完整的命令系统
-- ✅ 玩家加入时自动登录
-- ✅ 中文消息输出
-- ✅ **账号绑定系统**（GAS 账号与 Minecraft 玩家一一绑定）
-- ✅ **Tab 列表自定义**（支持占位符显示 GAS 信息）
-- ✅ **配置热重载**（无需重启服务器）
-- ✅ **OP 管理命令**（踢出所有玩家、绑定查询/解绑）
-- ✅ **服务器维护状态检查**（玩家加入时同步检查）
-- ✅ **兑换码功能**（支持 DLRS 兑换码核销）
-- ✅ **登录保护**（未登录状态下禁止使用大部分指令）
-- ✅ **全局命令拦截**（未登录玩家无法执行其他插件的命令）
-- ✅ **玩家封禁功能**（支持 OP 权限的玩家封禁）
+---
 
-## 安装步骤
+## 📋 目录
 
-1. 将编译好的 JAR 文件放入服务器的 `plugins` 文件夹
-2. 启动服务器以生成配置文件
-3. 编辑 `plugins/DLRS-GAS-For-Minecraft/config.yml` 文件
-4. 配置您的 DLRS 应用 ID 和应用 Token
-5. 重启服务器
+- [项目简介](#项目简介)
+- [核心功能](#核心功能)
+- [系统要求](#系统要求)
+- [安装指南](#安装指南)
+- [配置说明](#配置说明)
+- [命令列表](#命令列表)
+- [功能详解](#功能详解)
+- [开发指南](#开发指南)
+- [常见问题](#常见问题)
+- [许可证](#许可证)
 
-## 配置说明
+---
 
-在 `config.yml` 中配置以下参数：
+## 🎯 项目简介
+
+**DLRS-GAS For Minecraft** 是一个专为 Minecraft Paper 服务器设计的高级账号系统集成插件。它通过 DLRS-GAS 平台实现了完整的 OAuth 2.0 登录验证、自动登录、双重密码保护等功能，为服务器提供安全、便捷的账号管理解决方案。
+
+### 主要特点
+
+- 🔐 **OAuth 2.0 登录**：集成 DLRS-GAS 官方认证系统
+- 🚀 **自动登录**：基于 Access Token 的快速登录机制
+- 🛡️ **双重密码保护**：额外的账号安全层
+- 🎨 **自定义 Tab 列表**：支持占位符的动态 Tab 列表显示
+- 🔧 **玩家锁定系统**：未登录玩家的行为限制
+- 📊 **账号绑定管理**：GAS 账号与 Minecraft 账号绑定
+-  **维护模式检查**：远程服务器维护状态检测
+
+---
+
+## ✨ 核心功能
+
+### 1. 账号认证系统
+
+#### OAuth 登录流程
+```
+玩家输入 /gas login
+    ↓
+插件获取 OAuth Token
+    ↓
+玩家浏览器打开授权链接
+    ↓
+玩家在 GAS 平台完成登录
+    ↓
+插件轮询验证登录状态
+    ↓
+获取 Access Token 和用户信息
+    ↓
+验证双重密码（如果已设置）
+    ↓
+完成登录，解锁玩家
+```
+
+#### 自动登录机制
+- 玩家首次登录后，Access Token 保存在本地数据库
+- 下次加入服务器时自动尝试验证 Token
+- Token 有效则自动登录，无效则提示手动登录
+- 自动登录成功后仍需验证双重密码
+
+### 2. 双重密码保护
+
+双重密码是登录后的第二层安全保护：
+
+- **设置密码**：`/gas double-password set <密码>`
+- **验证密码**：`/gas double-password verify <密码>` 或 `/login <密码>`
+- **修改密码**：`/gas double-password change <新密码>`
+- **移除密码**：`/gas double-password remove`（仅 OP）
+- **查看状态**：`/gas double-password status`
+
+**密码要求**：
+- 长度：4-16 位
+- 字符：仅限数字和字母（a-z, A-Z, 0-9）
+- 加密：SHA-256 + 随机盐值
+
+### 3. 玩家锁定系统
+
+未登录或未验证双重密码的玩家会被锁定：
+
+**锁定效果**：
+- 🌑 **失明效果**：无法看清周围环境
+-  **完全减速**：Slowness VI (等级 255)，无法移动
+- 🦘 **禁止跳跃**：Jump Boost 负等级，无法跳跃
+- 🎮 **冒险模式**：无法破坏或放置方块
+- 🛡️ **无敌状态**：免疫所有伤害
+
+**解锁条件**：
+- 完成 OAuth 登录
+- 验证双重密码（如果已设置）
+
+### 4. Tab 列表自定义
+
+支持动态占位符的 Tab 列表显示：
+
+**可用占位符**：
+- `%player%` - 玩家游戏 ID
+- `%gas_nickname%` - GAS 昵称
+- `%ping%` - 网络延迟
+- `%tps%` - 服务器 TPS
+
+**示例配置**：
+```yaml
+tab-list:
+  enabled: true
+  header: |
+    &e&lDLRS-GAS 服务器
+    &7欢迎回来，%player%
+  footer: |
+    &7GAS 昵称：%gas_nickname%
+    &7延迟：%ping%ms | TPS: %tps%
+```
+
+### 5. 权限管理
+
+根据 GAS 用户组自动设置权限：
+
+- **用户组 104**：自动授予 OP 权限
+- **其他用户组**：取消 OP 权限
+- **动态更新**：登录时自动检测并应用
+
+### 6. 账号绑定管理
+
+防止 GAS 账号被多人使用：
+
+- 每个 GAS UID 只能绑定一个 Minecraft UUID
+- 绑定冲突时拒绝登录并踢出玩家
+- OP 可执行解绑操作：`/gas unbind <UID>`
+- 查看绑定状态：`/gas bind`
+
+### 7. 维护模式检查
+
+支持远程维护状态检测：
+
+- 玩家加入时自动检查服务器维护状态
+- 维护中则拒绝玩家加入并显示自定义消息
+- 可在配置中启用/禁用此功能
+
+---
+
+## 💻 系统要求
+
+### 运行环境
+
+| 组件 | 最低要求 | 推荐配置 |
+|------|---------|---------|
+| **Minecraft** | 1.21+ | 1.21.8 |
+| **服务端** | Paper | Paper 1.21.8 (build 26.1.2+) |
+| **Java** | 21+ | Java 21 LTS |
+| **内存** | 1 GB | 2 GB+ |
+
+### 依赖项
+
+插件已内置以下依赖（通过 Maven Shade 打包）：
+- Kotlin 2.3.21
+- JSON 20231013
+- SQLite JDBC 3.49.1.0
+
+### 前置要求
+
+- DLRS-GAS 开发者账号
+- 有效的 App ID 和 App Token
+- 可访问 `api.chinadlrs.com`
+
+---
+
+## 📦 安装指南
+
+### 1. 下载插件
+
+```bash
+# 从 Releases 页面下载最新版本的 JAR 文件
+# 或自行编译
+git clone https://github.com/your-repo/DLRS-GAS-For-Minecraft.git
+cd DLRS-GAS-For-Minecraft
+mvn clean package
+```
+
+### 2. 安装到服务器
+
+```bash
+# 将 JAR 文件复制到服务器 plugins 目录
+cp DLRS-GAS-For-Minecraft-1.0.3-7.jar /path/to/server/plugins/
+
+# 重启服务器
+./start.sh
+```
+
+### 3. 配置插件
+
+1. 首次启动后，插件会自动生成配置文件
+2. 编辑 `plugins/DLRS-GAS-For-Minecraft/config.yml`
+3. 填写 DLRS 应用信息
 
 ```yaml
 dlrs:
+  app-id: "your-app-id-here"
+  app-token: "your-app-token-here"
+  language: "zh"  # zh 或 en
+```
+
+4. 重载配置：`/gas reload`（需要 OP 权限）
+
+### 4. 验证安装
+
+```bash
+# 在游戏中执行
+/gas status
+
+# 控制台查看日志
+# 应看到：[DLRS-GAS] DLRS-GAS For Minecraft 插件已启用!
+```
+
+---
+
+## ⚙️ 配置说明
+
+### 完整配置文件
+
+```yaml
+# DLRS-GAS For Minecraft 配置文件
+# 请根据实际情况修改以下配置
+
+dlrs:
   # DLRS 应用 ID (从 DLRS 开发者后台获取)
-  app-id: "1"
-
+  app-id: "your-app-id"
+  
   # DLRS 应用 Token (从 DLRS 开发者后台获取，请妥善保管)
-  app-token: "YOUR_APP_TOKEN"
-
+  app-token: "your-app-token"
+  
   # 语言设置 (en=英文，zh=中文)
-  language: "en"
+  language: "zh"
 
-# Tab 列表自定义配置
+# Tab 列表配置
 tab-list:
+  # 是否启用 Tab 列表自定义
   enabled: true
-  header: "&e&lDLRS-GAS 服务器\n&7欢迎回来，%player%"
-  footer: "&7GAS 昵称：%gas_nickname%\n&7GAS UID: %gas_uid%\n&7延迟：%ping%ms | TPS: %tps%"
+  
+  # Tab 列表顶部显示内容（支持颜色代码和占位符）
+  header: |
+    &e&lDLRS-GAS 服务器
+    &7欢迎回来，%player%
+  
+  # Tab 列表底部显示内容（支持颜色代码和占位符）
+  footer: |
+    &7GAS 昵称：%gas_nickname%
+    &7延迟：%ping%ms | TPS: %tps%
 
 # 登录超时配置
 login-timeout:
@@ -61,284 +272,771 @@ login-timeout:
 maintenance:
   # 是否启用维护状态检查（在玩家加入时检查）
   enabled: false
-  # 自定义维护消息（当 API 不可用或返回维护状态时显示）
+  # 自定义维护消息（当 API 返回维护状态时显示）
   custom-message: |
     &c[DLRS-GAS] 服务器正在维护中
     &e请稍后再试！
+
+# 玩家数据存储
+# 玩家登录信息将自动存储在 players 节点下
+# 无需手动修改
+players: {}
 ```
 
-**重要**: 您需要从 DLRS 开发者后台获取 `app-id` 和 `app-token` 才能使用此插件。
+### 配置项说明
 
-### Tab 列表占位符
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `dlrs.app-id` | String | `""` | DLRS 应用 ID，必填 |
+| `dlrs.app-token` | String | `""` | DLRS 应用 Token，必填 |
+| `dlrs.language` | String | `"en"` | 界面语言，`zh` 或 `en` |
+| `tab-list.enabled` | Boolean | `true` | 是否启用 Tab 列表自定义 |
+| `tab-list.header` | String | - | Tab 列表顶部内容，支持多行 |
+| `tab-list.footer` | String | - | Tab 列表底部内容，支持多行 |
+| `login-timeout.enabled` | Boolean | `true` | 是否启用登录超时检测 |
+| `login-timeout.timeout-seconds` | Integer | `60` | 登录超时时间（秒） |
+| `maintenance.enabled` | Boolean | `false` | 是否启用维护状态检查 |
+| `maintenance.custom-message` | String | - | 维护时的自定义消息 |
 
-| 占位符 | 说明 |
-|--------|------|
-| `%player%` | 玩家游戏名 |
-| `%player_uuid%` | 玩家 UUID |
-| `%ping%` | 玩家延迟 |
-| `%tps%` | 服务器 TPS |
-| `%gas_nickname%` | GAS 昵称 |
-| `%gas_uid%` | GAS 用户 ID |
-| `%gas_email%` | GAS 邮箱 |
+---
 
-## 命令列表
+## 🎮 命令列表
 
-| 命令 | 权限 | 登录要求 | 描述 |
-|------|------|----------|------|
-| `/gas login` | 所有玩家 | ❌ 无需登录 | 开始 DLRS 账号登录流程 |
-| `/gas logout` | 所有玩家 | ✅ 需登录 | 登出 DLRS 账号 |
-| `/gas status` | 所有玩家 | ❌ 无需登录 | 查看当前登录状态 |
-| `/gas info` | 所有玩家 | ✅ 需登录 | 查看账号详细信息 |
-| `/gas redeem <兑换码>` | 所有玩家 | ✅ 需登录 | 兑换 DLRS 兑换码 |
-| `/gas ban <玩家/UID> [时长] [原因]` | OP | ❌ 无需登录 | 封禁玩家账号 |
-| `/gas reload` | OP | ❌ 无需登录 | 热重载插件配置 |
-| `/gas kickall` | OP | ❌ 无需登录 | 踢出所有在线玩家 |
-| `/gas logoutall` | OP | ❌ 无需登录 | 登出所有已登录的 GAS 账号 |
-| `/gas bind [玩家/UID]` | OP | ✅ 需登录 | 查看绑定状态 |
-| `/gas unbind [玩家/UID]` | OP | ✅ 需登录 | 解绑 GAS 账号 |
+### 基础命令
 
-> **注意**: 从 v1.0.1-6 版本开始，大部分命令需要玩家先登录才能使用。这是为了保护账号安全，防止未授权访问。
+| 命令 | 描述 | 权限 |
+|------|------|------|
+| `/gas` | 显示简要提示 | 所有人 |
+| `/gas help` | 显示完整命令帮助 | 所有人 |
+| `/gas login` | 开始 OAuth 登录流程 | 所有人 |
+| `/gas logout` | 登出当前账号 | 所有人 |
+| `/gas status` | 查看登录状态 | 所有人 |
+| `/gas info` | 查看详细账号信息 | 所有人 |
+| `/gas redeem <兑换码>` | 兑换 DLRS 兑换码 | 所有人 |
+
+### 简化登录命令
+
+| 命令 | 描述 | 权限 |
+|------|------|------|
+| `/login <密码>` | 快速验证双重密码 | 所有人 |
+
+### 双重密码命令
+
+| 命令 | 描述 | 权限 |
+|------|------|------|
+| `/gas double-password set <密码>` | 设置双重密码（4-16位数字或字母） | 所有人 |
+| `/gas double-password verify <密码>` | 验证双重密码 | 所有人 |
+| `/gas double-password change <新密码>` | 修改双重密码 | 所有人 |
+| `/gas double-password remove` | 移除双重密码 | OP |
+| `/gas double-password status` | 查看双重密码设置状态 | 所有人 |
+
+### 管理命令（需要 OP 权限）
+
+| 命令 | 描述 | 权限 |
+|------|------|------|
+| `/gas reload` | 重载插件配置 | OP |
+| `/gas kickall` | 踢出所有玩家 | OP |
+| `/gas logoutall` | 登出所有已登录的 GAS 账号 | OP |
+| `/gas unbind <玩家/UID>` | 解绑 GAS 账号 | OP |
+| `/gas bind` | 查看绑定状态 | OP |
 
 ### 命令别名
+
 - `/gasl`
 - `/dlrs`
 - `/dlrsgas`
 
-## 使用流程
-
-### 首次登录
-
-1. 在游戏中输入 `/gas login`
-2. 插件会显示一个授权链接
-3. 在浏览器中打开该链接
-4. 在网页上完成 DLRS 账号登录和授权
-5. 返回游戏，插件会自动验证登录状态
-6. 登录成功后会显示欢迎信息
-
-### 自动登录
-
-- 玩家首次登录成功后，access_token 会被保存
-- 下次加入服务器时，插件会自动尝试验证 token 并登录
-- 如果 token 过期，玩家需要重新执行 `/gas login`
-
-### 查看信息
-
-使用 `/gas info` 可以查看：
-- 用户 ID (uid)
-- 昵称 (nickname)
-- 邮箱 (email)
-- 用户组 (user_group)
-- 头像 URL (avatar_url)
-
-### 兑换码
-
-使用 `/gas redeem <兑换码>` 可以兑换 DLRS 兑换码：
-- 需要先登录 GAS 账号
-- 兑换成功会将奖励内容输出到聊天栏
-- 兑换失败会提示错误信息
-- 支持全局兑换码和单次兑换码
-
-```
-/gas redeem ABCD-EFGH-IJKL-MNOP
-```
-
-## 账号绑定系统
-
-### 绑定规则
-
-每个 GAS 账号只能绑定一个 Minecraft 玩家，防止账号共享。
-
-| 情况 | 处理方式 |
-|------|----------|
-| UID 未绑定，玩家未绑定 | 自动建立新绑定 |
-| UID 已绑定到当前玩家 | 允许登录，昵称变化则自动更新 |
-| UID 已绑定到其他玩家 | 踢出玩家，显示绑定冲突信息 |
-| UID 未绑定，玩家已绑定其他 UID | 允许重新绑定 |
-
-### 绑定冲突提示
-
-当检测到账号绑定时，未绑定的玩家会被踢出并看到以下提示：
-
-```
-该 GAS 账号已绑定至其他玩家
-绑定的玩家：Steve
-你的玩家 ID: Alex
-每个 GAS 账号只能绑定一个玩家，无法重新注册
-```
-
-### OP 管理命令
-
-**查看绑定状态**
-```
-# 查看自己的绑定状态
-/gas bind
-
-# 查看指定玩家的绑定状态
-/gas bind Steve
-
-# 查看指定 UID 的绑定状态
-/gas bind 12345
-```
-
-**解绑账号**
-```
-# 解绑自己的账号
-/gas unbind
-
-# 解绑指定玩家的账号
-/gas unbind Steve
-
-# 解绑指定 UID 的账号
-/gas unbind 12345
-```
-
-**登出所有玩家**
-```
-# 登出所有已登录的 GAS 账号
-/gas logoutall
-```
-
-**踢出所有玩家**
-```
-# 踢出所有在线玩家
-/gas kickall
-```
-
-## 技术实现
-
-### 架构组件
-
-- **AESEncryptor**: AES-256-CBC 加密工具，用于加密 appToken
-- **HttpUtil**: HTTP 请求工具，与 DLRS API 通信
-- **DLRSConfig**: 配置管理类
-- **DLRSLoginService**: OAuth 登录服务，处理完整登录流程
-- **DLRSAutoLoginService**: 自动登录服务，验证 access_token
-- **PlayerDataService**: SQLite 数据服务，管理玩家数据和绑定关系
-- **DLRSCommandHandler**: 命令处理器
-- **TabListService**: Tab 列表管理服务
-- **PlayerLockService**: 玩家锁定服务，管理未登录玩家
-- **MaintenanceService**: 服务器维护状态检查服务
-
-### API 端点
-
-插件使用以下 DLRS API 端点：
-
-- `https://api.chinadlrs.com/developer/oauth.php` - OAuth 认证
-- `https://api.chinadlrs.com/developer/profile.php` - 获取用户信息
-- `https://api.chinadlrs.com/developer/auto-login.php` - 自动登录验证
-- `https://api.chinadlrs.com/developer/maint.php` - 服务器维护状态检查
-- `https://api.chinadlrs.com/developer/redeem.php` - 兑换码核销
-- `https://gas.chinadlrs.com/oauth` - OAuth 授权页面
-
-### 数据存储
-
-玩家登录信息存储在 SQLite 数据库中：
-
-**players 表** - 玩家账号数据
-```
-uuid TEXT PRIMARY KEY
-uid TEXT
-nickname TEXT
-email TEXT
-access_token TEXT
-avatar_url TEXT
-user_group TEXT
-last_login TIMESTAMP
-```
-
-**bindings 表** - 账号绑定关系
-```
-uid TEXT PRIMARY KEY
-player_uuid TEXT
-player_name TEXT
-bound_at TIMESTAMP
-```
-
-## 安全注意事项
-
-1. **保护 appToken**: 不要在公开场合泄露您的 appToken
-2. **HTTPS 通信**: 所有 API 请求都使用 HTTPS 加密
-3. **Token 管理**: access_token 本地存储，定期验证有效性
-4. **加密传输**: appToken 在传输前使用 AES-256-CBC 加密
-5. **账号绑定**: 防止 GAS 账号被多个玩家共享使用
-6. **登录保护**: 未登录玩家无法使用敏感命令
-
-## 常见问题
-
-### Q: 登录后没有反应？
-A: 确保您已在浏览器中完成了授权流程，并且网络连接正常。
-
-### Q: 自动登录失败怎么办？
-A: Token 可能已过期，请使用 `/gas logout` 然后重新登录。
-
-### Q: 如何更改配置？
-A: 编辑 `config.yml` 后，使用 `/gas reload` 命令或重启服务器。
-
-### Q: 支持哪些 Minecraft 版本？
-A: 本插件基于 Paper API 1.21.8+ 构建，适用于 1.21.8 及以上版本。
-
-### Q: 玩家提示"账号已绑定至其他玩家"怎么办？
-A: 这说明该 GAS 账号已在其他玩家处绑定。如需更换绑定，请使用 OP 命令 `/gas unbind` 先解绑。
-
-### Q: Tab 列表占位符不显示？
-A: 确保玩家已完成 GAS 登录。未登录玩家会显示"未登录"。
-
-### Q: 如何设置登录超时时间？
-A: 在 `config.yml` 中修改 `login-timeout.timeout-seconds` 参数，单位为秒。超时后玩家会被自动踢出。
-
-### Q: 登录超时后会怎样？
-A: 玩家会被自动踢出服务器，提示"登录超时，请重新尝试登录"。玩家需要重新执行 `/gas login` 进行登录。
-
-### Q: 如何启用服务器维护状态检查？
-A: 在 `config.yml` 中将 `maintenance.enabled` 设置为 `true`。启用后，插件会在玩家加入服务器时检查维护状态。
-
-### Q: 服务器维护时玩家会怎样？
-A: 当服务器处于维护状态时，玩家尝试加入服务器会被自动踢出，并显示维护消息，包含维护内容和预计结束时间。
-
-### Q: 维护状态 API 返回的数据是加密的吗？
-A: 是的，DLRS 维护 API 返回的 `content` 和 `end_time` 字段是经过 AES-256-CBC 加密的。插件会自动使用你的 `app-token` 进行解密。
-
-### Q: 如何批量登出所有玩家？
-A: 使用 OP 命令 `/gas logoutall` 可以登出所有已登录 GAS 账号的玩家。
-
-### Q: 如何批量踢出所有玩家？
-A: 使用 OP 命令 `/gas kickall` 可以踢出所有在线玩家（执行命令的玩家除外）。
-
-### Q: 为什么我使用命令时提示需要登录？
-A: 从 v1.0.1-6 版本开始，大部分命令（如 `/gas info`、`/gas redeem` 等）需要玩家先登录才能使用。这是为了保护账号安全。只有 `/gas login`、`/gas status` 等少数命令可以在未登录状态下使用。
-
-### Q: 兑换码如何使用？
-A: 使用 `/gas redeem <兑换码>` 命令兑换。需要先登录 GAS 账号，兑换成功后奖励内容会显示在聊天栏中。
-
-### Q: 为什么我不能使用其他插件的命令？
-A: 从 v1.0.1-7 版本开始，插件增加了全局命令拦截功能。未登录 GAS 账号的玩家无法执行其他插件的命令（如 `/tp`、`/spawn` 等）。这是为了强制玩家登录，保障账号安全。只有白名单中的命令（如 `/help`、`/version`、`/plugins` 等基础命令）可以在未登录状态下使用。
-
-### Q: 如何使用玩家封禁功能？
-A: 该功能需要 OP 权限。使用 `/gas ban <玩家/UID> [时长] [原因]` 命令可以封禁指定玩家。封禁后，玩家会被立即踢出服务器并显示相关封禁信息。时长参数以小时为单位，不填则为永久封禁。
-
-## 开发信息
-
-- **语言**: Kotlin 2.3.21
-- **平台**: PaperMC 1.21.8+
-- **Java 版本**: Java 25
-- **构建工具**: Maven
-
-### 构建命令
-
-```bash
-mvn clean package
-```
-
-构建产物位于 `target/DLRS-GAS-For-Minecraft-<version>.jar`
-
-## 许可证
-
-本项目遵循 MIT 许可证。
-
-## 联系方式
-
-如有问题或建议，请联系插件作者。
+所有别名与 `/gas` 命令功能完全相同。
 
 ---
 
-**注意**: 本插件需要有效的 DLRS 开发者账户和应用凭证才能正常工作。
+## 🔍 功能详解
+
+### OAuth 登录流程
+
+#### 1. 启动登录
+```
+/gas login
+```
+
+插件执行以下操作：
+1. 向 DLRS API 请求 OAuth Token
+2. 生成授权链接并发送给玩家
+3. 开始在后台轮询验证登录状态
+
+#### 2. 完成授权
+玩家在浏览器中：
+1. 打开授权链接
+2. 使用 GAS 账号登录
+3. 授权应用访问权限
+
+#### 3. 自动验证
+插件自动：
+1. 每 5 秒检查一次登录状态
+2. 检测到登录成功后获取 Access Token
+3. 获取用户详细信息（昵称、UID、用户组等）
+4. 保存数据到本地 SQLite 数据库
+5. 检查账号绑定情况
+6. 提示验证双重密码（如果已设置）
+
+#### 4. 超时处理
+- 默认超时时间：60 秒
+- 超时后自动踢出玩家
+- 可在配置中调整超时时间
+
+### 自动登录流程
+
+#### 首次登录
+1. 玩家通过 OAuth 登录
+2. Access Token 保存到本地数据库
+3. 设置双重密码（可选）
+
+#### 后续加入
+1. 玩家加入服务器
+2. 插件检查是否有保存的 Token
+3. 向 DLRS API 验证 Token 有效性
+4. 有效则自动登录，无效则提示手动登录
+5. 自动登录成功后仍需验证双重密码
+
+### 双重密码机制
+
+#### 为什么需要双重密码？
+
+DLRS-GAS 是跨平台的通用账号系统，而双重密码提供了：
+- **服务器级保护**：即使 GAS 账号泄露，攻击者仍需知道双重密码
+- **快速验证**：无需每次打开浏览器登录
+- **灵活性**：可随时修改或移除
+
+#### 工作流程
+
+```
+玩家加入服务器
+    ↓
+自动登录成功（或手动 OAuth 登录）
+    ↓
+检查是否设置双重密码
+    ↓
+未设置 → 提示设置（可选）
+已设置 → 要求验证
+    ↓
+验证成功 → 解锁玩家
+验证失败 → 保持锁定
+```
+
+#### 安全特性
+
+- **加密存储**：SHA-256 + 随机盐值
+- **本地存储**：SQLite 数据库，不上传服务器
+- **格式限制**：仅允许数字和字母，防止注入攻击
+- **OP 管理**：服务器管理员可移除忘记的密码
+
+### 玩家锁定系统
+
+#### 锁定条件
+
+玩家会被锁定在以下情况：
+1. 首次加入服务器，未登录
+2. OAuth 登录超时
+3. Access Token 过期，自动登录失败
+4. 已登录但未验证双重密码
+
+#### 锁定效果详解
+
+| 效果 | 药水类型 | 等级 | 作用 |
+|------|---------|------|------|
+| 失明 | Blindness | 0 | 无法看清环境 |
+| 减速 | Slowness | 255 (VI) | 完全无法移动 |
+| 禁跳 | Jump Boost | -4 | 无法跳跃 |
+| 模式 | Adventure | - | 无法破坏/放置方块 |
+| 无敌 | Invulnerable | true | 免疫所有伤害 |
+
+#### 解锁流程
+
+```
+玩家处于锁定状态
+    ↓
+完成 OAuth 登录
+    ↓
+如果设置了双重密码
+    ↓
+    验证双重密码
+    ↓
+验证成功 → 移除所有限制效果
+    ↓
+恢复原有游戏模式
+    ↓
+正常游戏
+```
+
+### Tab 列表自定义
+
+#### 占位符说明
+
+| 占位符 | 说明 | 示例 |
+|--------|------|------|
+| `%player%` | 玩家游戏 ID | `EroSushi_Meow` |
+| `%gas_nickname%` | GAS 昵称 | `筱夕Sushi` |
+| `%ping%` | 网络延迟（毫秒） | `45` |
+| `%tps%` | 服务器 TPS | `19.8` |
+
+#### 颜色代码
+
+使用 Minecraft 标准颜色代码：
+- `&0` - `&9`：黑色到蓝色
+- `&a` - `&f`：绿色到白色
+- `&l`：粗体
+- `&o`：斜体
+- `&n`：下划线
+- `&m`：删除线
+
+#### 刷新机制
+
+- 每 5 秒自动刷新所有在线玩家的 Tab 列表
+- 玩家登录/登出时立即刷新
+- 性能优化：仅在有变化时更新
+
+### 账号绑定管理
+
+#### 绑定规则
+
+- 一个 GAS UID 只能绑定一个 Minecraft UUID
+- 绑定后无法更改（除非 OP 手动解绑）
+- 防止账号共享和盗用
+
+#### 冲突处理
+
+```
+玩家 A 使用 GAS UID: 12345 绑定 Minecraft UUID: AAA
+    ↓
+玩家 B 尝试使用 GAS UID: 12345 登录
+    ↓
+系统检测到绑定冲突
+    ↓
+拒绝登录并踢出玩家 B
+    ↓
+显示错误信息：该 GAS 账号已绑定其他玩家
+```
+
+#### 管理命令
+
+```bash
+# 查看绑定状态
+/gas bind
+
+# 解绑指定 UID（需要 OP）
+/gas unbind 12345
+
+# 解绑指定玩家（需要 OP）
+/gas unbind PlayerName
+```
+
+### 维护模式检查
+
+#### 工作原理
+
+1. 玩家尝试加入服务器
+2. 插件同步检查 DLRS 服务器维护状态
+3. 如果正在维护：
+   - 拒绝玩家加入
+   - 显示自定义维护消息
+   - 不显示加入消息
+4. 如果正常运行：
+   - 继续正常登录流程
+
+#### 配置示例
+
+```yaml
+maintenance:
+  enabled: true
+  custom-message: |
+    &c[DLRS-GAS] 服务器正在维护中
+    &7预计恢复时间：2024-01-01 12:00
+    &e请稍后再试！
+```
+
+---
+
+## 💡 使用场景
+
+### 场景 1：新玩家首次加入
+
+```
+玩家加入服务器
+    ↓
+显示：[DLRS-GAS] 您尚未登录，请使用 /gas login 进行登录
+    ↓
+玩家执行：/gas login
+    ↓
+显示：请在浏览器中打开以下链接完成登录...
+    ↓
+玩家在 GAS 平台完成登录
+    ↓
+显示：登录成功！欢迎，筱夕Sushi!
+    ↓
+提示：请设置双重密码来保护您的账号
+    ↓
+玩家设置双重密码
+    ↓
+解锁并正常游戏
+```
+
+### 场景 2：老玩家自动登录
+
+```
+玩家加入服务器
+    ↓
+显示：正在尝试自动登录...
+    ↓
+显示：自动登录成功！欢迎回来，筱夕Sushi!
+    ↓
+提示：请验证您的双重密码
+    ↓
+玩家执行：/login 1234
+    ↓
+显示：双重密码验证成功！您现在可以正常游戏了
+    ↓
+解锁并正常游戏
+```
+
+### 场景 3：Token 过期处理
+
+```
+玩家加入服务器
+    ↓
+显示：正在尝试自动登录...
+    ↓
+显示：自动登录失败，Token 已过期
+    ↓
+显示：请使用 /gas login 重新登录
+    ↓
+玩家被锁定
+    ↓
+玩家执行：/gas login
+    ↓
+重新完成 OAuth 流程
+```
+
+### 场景 4：账号绑定冲突
+
+```
+玩家 A 已绑定 GAS UID: 12345
+    ↓
+玩家 B 尝试登录同一个 GAS 账号
+    ↓
+系统检测到冲突
+    ↓
+玩家 B 被踢出
+    ↓
+显示：该 GAS 账号已绑定其他 Minecraft 玩家
+    ↓
+联系管理员解绑
+```
+
+---
+
+## 🛠️ 开发指南
+
+### 项目结构
+
+```
+DLRS-GAS-For-Minecraft/
+├── src/
+│   └── main/
+│       ├── kotlin/com/sushi/dLRSGASForMinecraft/
+│       │   ├── command/
+│       │   │   └── DLRSCommandHandler.kt       # 命令处理器
+│       │   ├── config/
+│       │   │   ── DLRSConfig.kt               # 配置管理
+│       │   ├── listener/
+│       │   │   ├── PlayerCommandInterceptor.kt # 命令拦截器
+│       │   │   ── PlayerLockListener.kt       # 锁定监听器
+│       │   ├── model/
+│       │   │   └── UserInfo.kt                 # 用户数据模型
+│       │   ├── service/
+│       │   │   ├── DLRSAutoLoginService.kt     # 自动登录服务
+│       │   │   ├── DLRSLoginService.kt         # OAuth 登录服务
+│       │   │   ├── DoublePasswordService.kt    # 双重密码服务
+│       │   │   ├── MaintenanceService.kt       # 维护检查服务
+│       │   │   ├── PlayerDataService.kt        # 玩家数据服务
+│       │   │   ├── PlayerLockService.kt        # 玩家锁定服务
+│       │   │   └── TabListService.kt           # Tab 列表服务
+│       │   ├── util/
+│       │   │   ├── AESEncryptor.kt             # AES 加密工具
+│       │   │   └── HttpUtil.kt                 # HTTP 请求工具
+│       │   ├── DLRSGASForMinecraft.kt          # 主类
+│       │   └── DLRSGASForMinecraftBootstrap.kt # 引导类
+│       └── resources/
+│           ├── config.yml                      # 配置文件模板
+│           └── paper-plugin.yml                # Paper 插件描述
+├── pom.xml                                     # Maven 配置
+── README.md                                   # 项目文档
+```
+
+### 技术栈
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Kotlin | 2.3.21 | 主要编程语言 |
+| Paper API | 1.21.8 | Minecraft 服务端 API |
+| Maven | 3.x | 项目构建管理 |
+| SQLite | 3.49.1.0 | 本地数据存储 |
+| JSON | 20231013 | HTTP 请求/响应解析 |
+
+### 构建项目
+
+```bash
+# 克隆项目
+git clone https://github.com/your-repo/DLRS-GAS-For-Minecraft.git
+
+# 进入项目目录
+cd DLRS-GAS-For-Minecraft
+
+# 编译项目
+mvn clean package
+
+# 编译后的 JAR 文件位置
+target/DLRS-GAS-For-Minecraft-1.0.3-7.jar
+```
+
+### 核心 API
+
+#### 获取服务实例
+
+```kotlin
+// 在主类中获取各种服务实例
+val plugin = DLRSGASForMinecraft.instance
+val dataService = plugin.getDataService()
+val tabListService = plugin.getTabListService()
+val config = plugin.getConfigManager()
+```
+
+#### 玩家数据操作
+
+```kotlin
+// 保存玩家信息
+dataService.saveUserInfo(playerUUID, userInfo)
+
+// 获取玩家信息
+val userInfo = dataService.getPlayerInfo(playerUUID)
+
+// 检查登录状态
+val isLoggedIn = dataService.isLoggedIn(playerUUID)
+
+// 清除玩家数据
+dataService.clearPlayerData(playerUUID)
+```
+
+#### 玩家锁定控制
+
+```kotlin
+// 锁定玩家（带消息）
+lockService.lockPlayer(player, sendMessage = true)
+
+// 锁定玩家（不带消息）
+lockService.lockPlayer(player, sendMessage = false)
+
+// 解锁玩家
+lockService.unlockPlayer(player)
+
+// 检查锁定状态
+val isLocked = lockService.isLocked(player)
+```
+
+### 扩展开发
+
+#### 添加新命令
+
+1. 在 `DLRSCommandHandler.kt` 中添加命令处理逻辑
+2. 在 `paper-plugin.yml` 中注册命令（如需要）
+3. 更新帮助信息
+
+#### 添加新占位符
+
+1. 在 `TabListService.kt` 中添加占位符替换逻辑
+2. 在 README 中更新占位符文档
+
+#### 自定义锁定效果
+
+修改 `PlayerLockService.kt` 中的 `lockPlayer` 方法：
+
+```kotlin
+fun lockPlayer(player: Player, sendMessage: Boolean = true) {
+    // 添加自定义药水效果
+    player.addPotionEffect(PotionEffect(...))
+    
+    // 添加自定义限制
+    player.allowFlight = false
+}
+```
+
+---
+
+## ❓ 常见问题
+
+### Q1: 插件启动后提示 App ID 或 Token 无效？
+
+**A**: 请检查：
+1. 是否正确填写了 `config.yml` 中的 `app-id` 和 `app-token`
+2. 这些信息可以从 DLRS 开发者后台获取
+3. 确保服务器可以访问 `api.chinadlrs.com`
+
+### Q2: 自动登录失败怎么办？
+
+**A**: 可能原因：
+1. Access Token 已过期（默认有效期未知，取决于 DLRS 设置）
+2. 网络连接问题
+3. 解决方案：执行 `/gas login` 重新登录
+
+### Q3: 忘记了双重密码怎么办？
+
+**A**: 
+1. 联系服务器管理员
+2. 管理员使用 `/gas double-password remove` 移除密码
+3. 重新设置新密码
+
+### Q4: 如何禁用双重密码功能？
+
+**A**: 
+- 双重密码是可选的，玩家可以不设置
+- 未设置双重密码的玩家在 OAuth 登录后直接解锁
+- 无法全局禁用，因为这是核心安全功能
+
+### Q5: Tab 列表占位符不显示？
+
+**A**: 检查：
+1. `config.yml` 中 `tab-list.enabled` 是否为 `true`
+2. 占位符拼写是否正确
+3. 玩家是否已登录（未登录玩家部分占位符可能无效）
+
+### Q6: 玩家被踢出提示"账号已绑定"？
+
+**A**: 
+1. 该 GAS 账号已被其他 Minecraft 账号绑定
+2. 如果是误操作，联系管理员使用 `/gas unbind <UID>` 解绑
+3. 如果是账号被盗，联系 GAS 客服
+
+### Q7: 如何查看服务器维护状态？
+
+**A**: 
+1. 确保 `config.yml` 中 `maintenance.enabled` 为 `true`
+2. 维护状态由 DLRS 平台控制
+3. 维护时会显示自定义消息并拒绝玩家加入
+
+### Q8: 插件与其他权限插件冲突？
+
+**A**: 
+- 本插件仅处理 OP 权限（用户组 104）
+- 不影响其他权限插件的权限组
+- 如有冲突，检查权限插件的优先级设置
+
+### Q9: 如何备份玩家数据？
+
+**A**: 
+- 玩家数据存储在 `plugins/DLRS-GAS-For-Minecraft/` 目录
+- 定期备份以下文件：
+  - `config.yml`（包含玩家登录信息）
+  - `double_password.db`（双重密码数据库）
+- 建议使用服务器自动备份脚本
+
+### Q10: 支持 BungeeCord/Velocity 吗？
+
+**A**: 
+- 当前版本仅支持单服（Paper/Spigot）
+- BungeeCord/Velocity 版本正在开发中
+- 关注 Releases 页面获取更新
+
+---
+
+## 📊 性能优化
+
+### 数据库优化
+
+- 使用 SQLite 本地存储，减少网络延迟
+- 玩家数据缓存在内存中，减少磁盘 I/O
+- 异步执行数据库操作，避免阻塞主线程
+
+### 网络优化
+
+- HTTP 请求使用异步线程
+- 连接池复用，减少握手开销
+- 超时设置合理，避免长时间等待
+
+### 事件优化
+
+- 使用 `EventPriority.LOWEST` 优先处理登录逻辑
+- 减少事件监听器数量
+- 避免在事件处理中执行耗时操作
+
+---
+
+##  安全建议
+
+### 服务器端
+
+1. **保护配置文件**：确保 `config.yml` 的 App Token 不被泄露
+2. **定期备份**：备份玩家数据和配置文件
+3. **权限控制**：限制管理命令的 OP 权限
+4. **日志监控**：定期检查服务器日志，发现异常登录
+
+### 玩家端
+
+1. **设置双重密码**：强烈建议所有玩家设置双重密码
+2. **保护 GAS 账号**：不要在公共场合泄露 GAS 账号信息
+3. **定期修改密码**：建议定期修改双重密码
+4. **警惕钓鱼**：只在官方 GAS 平台登录，不点击可疑链接
+
+---
+
+## 📝 更新日志
+
+### v1.0.3-7 (当前版本)
+
+#### ✨ 新增功能
+- 完整的 OAuth 2.0 登录流程
+- 基于 Access Token 的自动登录机制
+- 双重密码保护系统
+- 自定义 Tab 列表显示
+- 玩家锁定与解锁系统
+- 账号绑定管理
+- 维护状态检查
+- 命令拦截器（阻止未登录玩家执行命令）
+
+#### 🐛 修复问题
+- 修复异步线程安全问题（Bukkit API 在主线程调用）
+- 修复自动登录成功后显示误导性消息的问题
+- 优化 Tab 列表刷新性能
+- 改进错误提示信息
+
+#### 🔧 优化改进
+- 使用 Kotlin 2.3.21 提升代码质量
+- 优化数据库查询性能
+- 改进配置加载逻辑
+- 增强日志输出
+
+---
+
+### v1.0.2
+
+- 初步实现 OAuth 登录
+- 添加基础锁定系统
+- 支持 Tab 列表自定义
+
+---
+
+### v1.0.1
+
+- 修复命令注册问题
+- 改进错误处理
+- 优化配置结构
+
+---
+
+### v1.0.0
+
+- 首次发布
+- 基础登录功能
+- SQLite 数据存储
+
+---
+
+## 🤝 贡献指南
+
+欢迎贡献代码、报告问题或提出建议！
+
+### 贡献流程
+
+1. **Fork 项目**
+   ```bash
+   git fork https://github.com/your-repo/DLRS-GAS-For-Minecraft.git
+   ```
+
+2. **创建分支**
+   ```bash
+   git checkout -b feature/your-feature
+   ```
+
+3. **提交更改**
+   ```bash
+   git commit -m "feat: 添加新功能"
+   ```
+
+4. **推送到分支**
+   ```bash
+   git push origin feature/your-feature
+   ```
+
+5. **创建 Pull Request**
+
+### 代码规范
+
+- 使用 Kotlin 编码规范
+- 添加必要的注释
+- 遵循现有代码风格
+- 测试新功能
+
+### 报告问题
+
+使用 GitHub Issues 报告问题，请包含：
+- 问题描述
+- 复现步骤
+- 预期行为
+- 实际行为
+- 服务器版本和插件版本
+- 相关日志
+
+---
+
+## 📜 许可证
+
+本项目采用 **MIT License** 开源许可证。
+
+```
+MIT License
+
+Copyright (c) 2024 Sushi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
+## 📞 联系方式
+
+- **项目地址**：https://github.com/your-repo/DLRS-GAS-For-Minecraft
+- **问题反馈**：https://github.com/your-repo/DLRS-GAS-For-Minecraft/issues
+- **DLRS 官网**：https://gas.chinadlrs.com
+- **DLRS API 文档**：https://api.chinadlrs.com/developer
+
+---
+
+##  致谢
+
+- **DLRS-GAS 团队**：提供优秀的账号系统平台
+- **PaperMC 团队**：开发高性能的 Minecraft 服务端
+- **Kotlin 团队**：提供优雅的编程语言
+
+---
+
+<p align="center">
+  <b>如果觉得这个项目对你有帮助，请给一个 ⭐ Star！</b>
+</p>
+
+<p align="center">
+  Made ❤️ by Sushi
+</p>

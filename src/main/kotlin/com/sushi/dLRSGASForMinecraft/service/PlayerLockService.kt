@@ -29,8 +29,11 @@ class PlayerLockService {
      * - 无法攻击
      * - 无法破坏方块
      * - 不受伤害
+     * 
+     * @param player 玩家对象
+     * @param sendMessage 是否发送锁定提示消息（默认 true）
      */
-    fun lockPlayer(player: Player) {
+    fun lockPlayer(player: Player, sendMessage: Boolean = true) {
         if (lockedPlayers.contains(player.uniqueId)) {
             return // 已经锁定，不重复施加
         }
@@ -73,8 +76,11 @@ class PlayerLockService {
 
         player.isInvulnerable = true // 无敌
 
-        player.sendMessage("§c[DLRS-GAS] §7您尚未登录，账号已锁定")
-        player.sendMessage("§e[DLRS-GAS] §7请使用 /gas login 进行登录以解锁")
+        // 根据参数决定是否发送锁定消息
+        if (sendMessage) {
+            player.sendMessage("§c[DLRS-GAS] §7您尚未登录，账号已锁定")
+            player.sendMessage("§e[DLRS-GAS] §7请使用 /gas login 进行登录以解锁")
+        }
     }
 
     /**

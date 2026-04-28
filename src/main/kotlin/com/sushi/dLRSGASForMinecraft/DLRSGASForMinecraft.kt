@@ -6,6 +6,7 @@ import com.sushi.dLRSGASForMinecraft.listener.PlayerCommandInterceptor
 import com.sushi.dLRSGASForMinecraft.listener.PlayerLockListener
 import com.sushi.dLRSGASForMinecraft.service.DLRSAutoLoginService
 import com.sushi.dLRSGASForMinecraft.service.DLRSLoginService
+import com.sushi.dLRSGASForMinecraft.service.DoublePasswordService
 import com.sushi.dLRSGASForMinecraft.service.MaintenanceService
 import com.sushi.dLRSGASForMinecraft.service.PlayerDataService
 import com.sushi.dLRSGASForMinecraft.service.PlayerLockService
@@ -32,6 +33,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
     private lateinit var autoLoginService: DLRSAutoLoginService
     private lateinit var lockService: PlayerLockService
     private lateinit var dataService: PlayerDataService
+    private lateinit var doublePasswordService: DoublePasswordService
     private lateinit var commandHandler: DLRSCommandHandler
     private lateinit var lockListener: PlayerLockListener
     private lateinit var tabListService: TabListService
@@ -60,16 +62,20 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         dataService = PlayerDataService(dataFolder)
         dataService.initialize()
 
+        // 初始化双重密码服务
+        doublePasswordService = DoublePasswordService(dataFolder)
+        doublePasswordService.initialize()
+
         // 初始化服务
-        loginService = DLRSLoginService(config, dataService)
-        autoLoginService = DLRSAutoLoginService(config, dataService)
+        loginService = DLRSLoginService(config, dataService, doublePasswordService)
+        autoLoginService = DLRSAutoLoginService(config, dataService, doublePasswordService)
         lockService = PlayerLockService()
 
         // 保存静态引用
         lockServiceInstance = lockService
 
         // 初始化命令处理器
-        commandHandler = DLRSCommandHandler(loginService, autoLoginService, dataService)
+        commandHandler = DLRSCommandHandler(loginService, autoLoginService, dataService, doublePasswordService)
 
         // 初始化锁定监听器
         lockListener = PlayerLockListener(lockService)
@@ -95,6 +101,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
 
         // 注册命令（使用 registerCommand 方法）
         registerGasCommand()
+        registerLoginCommand()
 
         // 注册事件监听器
         val pluginManager = Bukkit.getPluginManager()
@@ -127,10 +134,23 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
     }
 
     /**
+     * 注册简化登录命令 /login
+     */
+    private fun registerLoginCommand() {
+        val loginCommand = LoginCommand()
+
+        this.registerCommand(
+            "login",
+            "快速验证双重密码",
+            emptyList(),
+            loginCommand
+        )
+    }
+
+    /**
      * GAS 命令实现类
      */
     private inner class GasCommand : BasicCommand {
-
         private val bukkitCommand = object : org.bukkit.command.Command("gas", "", "/gas", listOf("gasl", "dlrs", "dlrsgas")) {
             override fun execute(sender: CommandSender, label: String, args: Array<out String>): Boolean {
                 return commandHandler.onCommand(sender, this, label, args)
@@ -152,6 +172,65 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
         }
     }
 
+    /**
+     * 简化登录命令实现类
+     */
+    private inner class LoginCommand : BasicCommand {
+        private val bukkitCommand = object : org.bukkit.command.Command("login", "", "/login", emptyList()) {
+            override fun execute(sender: CommandSender, label: String, args: Array<out String>): Boolean {
+                // 检查是否为玩家
+                if (sender !is Player) {
+                    sender.sendMessage("§c[DLRS-GAS] §7此命令只能由玩家执行")
+                    return true
+                }
+
+                val player = sender
+
+                // 处理简化登录
+                if (args.isEmpty()) {
+                    player.sendMessage("§c[DLRS-GAS] §7用法：/login <双重密码>")
+                    return true
+                }
+
+                // 检查是否已设置双重密码
+                if (!doublePasswordService.hasDoublePassword(player.uniqueId)) {
+                    player.sendMessage("§c[DLRS-GAS] §7您尚未设置双重密码")
+                    player.sendMessage("§e[DLRS-GAS] §7请使用 /gas double-password set <密码> 设置双重密码")
+                    return true
+                }
+
+                val password = args[0]
+
+                // 验证双重密码
+                if (doublePasswordService.verifyDoublePassword(player.uniqueId, password)) {
+                    player.sendMessage("§a[DLRS-GAS] §7双重密码验证成功！")
+                    player.sendMessage("§a[DLRS-GAS] §7您现在可以正常游戏了")
+                    // 解锁玩家
+                    lockService.unlockPlayer(player)
+                } else {
+                    player.sendMessage("§c[DLRS-GAS] §7双重密码错误，请重试")
+                    player.sendMessage("§e[DLRS-GAS] §7如果忘记了双重密码，请联系管理员")
+                }
+
+                return true
+            }
+
+            override fun tabComplete(sender: CommandSender, alias: String, args: Array<out String>): List<String> {
+                return emptyList()
+            }
+        }
+
+        override fun execute(source: CommandSourceStack, args: Array<String>) {
+            val sender = source.sender
+            bukkitCommand.execute(sender, "login", args)
+        }
+
+        override fun suggest(source: CommandSourceStack, args: Array<String>): Collection<String> {
+            val sender = source.sender
+            return bukkitCommand.tabComplete(sender, "login", args)
+        }
+    }
+
     override fun onDisable() {
         // 取消所有调度任务
         Bukkit.getScheduler().cancelTasks(this)
@@ -164,6 +243,9 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
 
         // 关闭数据库连接
         dataService.shutdown()
+
+        // 关闭双重密码服务
+        doublePasswordService.shutdown()
 
         // 关闭维护状态检查服务
         maintenanceService.shutdown()
@@ -187,7 +269,7 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
             Bukkit.getScheduler().scheduleSyncDelayedTask(this, Runnable {
                 player.kickPlayer(convertColorCodes(maintMsg))
             }, 1L)
-            event.joinMessage = null
+            event.joinMessage = null // 不显示加入消息
             logger.info("[DLRS-GAS] 玩家 ${player.name} 尝试加入，但服务器正在维护中")
             return
         }
@@ -223,21 +305,6 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
                 })
             }
         })
-    }
-
-    /**
-     * 转换颜色代码
-     */
-    private fun convertColorCodes(text: String): String {
-        return text.replace('&', '§')
-    }
-
-    /**
-     * 设置未登录玩家的 Tab 列表名称（灰色斜体）
-     */
-    private fun setUnloggedPlayerListName(player: Player) {
-        val unloggedName = "§8§o（未登录）${player.name}"
-        player.setPlayerListName(unloggedName)
     }
 
     /**
@@ -284,11 +351,11 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
             config = DLRSConfig(this)
 
             // 重新初始化服务
-            loginService = DLRSLoginService(config, dataService)
-            autoLoginService = DLRSAutoLoginService(config, dataService)
+            loginService = DLRSLoginService(config, dataService, doublePasswordService)
+            autoLoginService = DLRSAutoLoginService(config, dataService, doublePasswordService)
 
             // 重新初始化命令处理器
-            commandHandler = DLRSCommandHandler(loginService, autoLoginService, dataService)
+            commandHandler = DLRSCommandHandler(loginService, autoLoginService, dataService, doublePasswordService)
 
             // 重新初始化 Tab 列表服务
             tabListService.reload()
@@ -305,5 +372,19 @@ class DLRSGASForMinecraft : JavaPlugin(), Listener {
             e.printStackTrace()
             false
         }
+    }
+
+    /**
+     * 设置未登录玩家的 Tab 列表名称
+     */
+    private fun setUnloggedPlayerListName(player: Player) {
+        player.setPlayerListName("§7[未登录] ${player.name}")
+    }
+
+    /**
+     * 转换颜色代码
+     */
+    private fun convertColorCodes(message: String): String {
+        return message.replace('&', '§')
     }
 }

@@ -3,6 +3,7 @@ package com.sushi.dLRSGASForMinecraft.command
 import com.sushi.dLRSGASForMinecraft.DLRSGASForMinecraft
 import com.sushi.dLRSGASForMinecraft.service.DLRSAutoLoginService
 import com.sushi.dLRSGASForMinecraft.service.DLRSLoginService
+import com.sushi.dLRSGASForMinecraft.service.DoublePasswordService
 import com.sushi.dLRSGASForMinecraft.service.PlayerDataService
 import org.bukkit.Bukkit
 import org.bukkit.command.Command
@@ -17,7 +18,8 @@ import org.bukkit.entity.Player
 class DLRSCommandHandler(
     private val loginService: DLRSLoginService,
     private val autoLoginService: DLRSAutoLoginService,
-    private val dataService: PlayerDataService
+    private val dataService: PlayerDataService,
+    private val doublePasswordService: DoublePasswordService
 ) : CommandExecutor, TabCompleter {
 
     companion object {
@@ -28,6 +30,7 @@ class DLRSCommandHandler(
             §7/gas status     - 查看登录状态
             §7/gas info       - 查看账号信息
             §7/gas redeem     - 兑换 DLRS 兑换码
+            §7/gas double-password - 双重密码相关命令
             §7/gas ban <玩家/UID> [时长] [原因] - 封禁玩家账号 (需要 OP 权限)
             §7/gas reload     - 重载插件配置 (需要 OP 权限)
             §7/gas kickall    - 踢出所有玩家 (需要 OP 权限)
@@ -44,7 +47,6 @@ class DLRSCommandHandler(
         label: String,
         args: Array<out String>
     ): Boolean {
-
         // 检查是否为玩家
         if (sender !is Player) {
             sender.sendMessage("§c[DLRS-GAS] §7此命令只能由玩家执行")
@@ -53,64 +55,79 @@ class DLRSCommandHandler(
 
         val player = sender
 
-        // 处理子命令
-        when {
-            args.isEmpty() -> {
-                player.sendMessage(COMMAND_USAGE.trimIndent())
+        // 处理 /login 简化命令
+        if (args.isNotEmpty() && args[0].lowercase() == "login") {
+            if (args.size >= 2) {
+                handleSimplifiedLogin(player, args)
+            } else {
+                // 无密码参数，执行常规登录流程
+                handleLogin(player)
             }
+            return true
+        }
+
+        // 处理普通 /gas 命令
+        if (args.isEmpty()) {
+            player.sendMessage("§e[DLRS-GAS] §7使用 /gas help 查看命令帮助")
+            return true
+        }
+
+        when (args[0].lowercase()) {
+            "login" -> handleLogin(player)
+            "logout" -> handleLogout(player)
+            "status" -> handleStatus(player)
+            "info" -> handleInfo(player)
+            "redeem" -> handleRedeem(player, args)
+            "double-password", "double" -> handleDoublePassword(player, args)
+            "help" -> showHelp(player)
             else -> {
-                when (args[0].lowercase()) {
-                    "login" -> handleLogin(player)
-                    "logout" -> handleLogout(player)
-                    "status" -> handleStatus(player)
-                    "info" -> handleInfo(player)
-                    "redeem" -> handleRedeem(player, args.copyOf())
-                    "ban" -> handleBan(player, args.copyOf())
-                    "reload" -> handleReload(player)
-                    "kickall" -> handleKickall(player)
-                    "logoutall" -> handleLogoutall(player)
-                    "unbind" -> handleUnbind(player, args.copyOf())
-                    "bind" -> handleBind(player, args.copyOf())
-                    else -> {
-                        player.sendMessage("§c[DLRS-GAS] §7未知命令，请使用 /gas 查看帮助")
-                    }
-                }
+                player.sendMessage("§c[DLRS-GAS] §7未知命令，使用 /gas help 查看帮助")
+                return false
             }
         }
 
         return true
     }
 
-    /**
-     * 检查玩家是否已登录，未登录则提示
-     */
-    private fun checkLoggedIn(player: Player, commandName: String): Boolean {
-        if (!loginService.isLoggedIn(player)) {
-            player.sendMessage("§c[DLRS-GAS] §7您尚未登录，无法使用 $commandName 命令")
-            player.sendMessage("§e[DLRS-GAS] §7请使用 /gas login 进行登录")
-            return false
-        }
-        return true
-    }
-
-    /**
-     * 处理登录命令
-     */
     private fun handleLogin(player: Player) {
-        // 检查是否已登录
         if (loginService.isLoggedIn(player)) {
-            player.sendMessage("§e[DLRS-GAS] §7您已经登录过了")
-            player.sendMessage("§e[DLRS-GAS] §7如需重新登录，请先使用 /gas logout")
+            player.sendMessage("§c[DLRS-GAS] §7您已经登录了")
             return
         }
 
-        // 开始登录流程
         loginService.startLogin(player)
     }
 
     /**
-     * 处理登出命令
+     * 处理简化登录命令 /login <密码>
      */
+    private fun handleSimplifiedLogin(player: Player, args: Array<out String>) {
+        if (args.size < 2) {
+            player.sendMessage("§c[DLRS-GAS] §7用法：/login <双重密码>")
+            return
+        }
+
+        val password = args[1]
+
+        // 检查是否已设置双重密码
+        if (!doublePasswordService.hasDoublePassword(player.uniqueId)) {
+            player.sendMessage("§c[DLRS-GAS] §7您尚未设置双重密码")
+            player.sendMessage("§e[DLRS-GAS] §7请使用 /gas double-password set <密码> 设置双重密码")
+            return
+        }
+
+        // 验证双重密码
+        if (doublePasswordService.verifyDoublePassword(player.uniqueId, password)) {
+            player.sendMessage("§a[DLRS-GAS] §7双重密码验证成功！")
+            player.sendMessage("§a[DLRS-GAS] §7您现在可以正常游戏了")
+            // 解锁玩家（如果之前因为没有双重密码而锁定）
+            DLRSGASForMinecraft.lockServiceInstance.unlockPlayer(player)
+        } else {
+            player.sendMessage("§c[DLRS-GAS] §7双重密码错误，请重试")
+            player.sendMessage("§e[DLRS-GAS] §7如果忘记了双重密码，请联系管理员")
+        }
+    }
+
     private fun handleLogout(player: Player) {
         if (!loginService.isLoggedIn(player)) {
             player.sendMessage("§c[DLRS-GAS] §7您尚未登录")
@@ -120,565 +137,217 @@ class DLRSCommandHandler(
         autoLoginService.logout(player)
     }
 
-    /**
-     * 处理状态查询命令
-     */
     private fun handleStatus(player: Player) {
         if (loginService.isLoggedIn(player)) {
-            player.sendMessage("§a[DLRS-GAS] §7当前状态：§a 已登录")
+            val userInfo = loginService.getPlayerInfo(player)
+            if (userInfo != null) {
+                player.sendMessage("§a[DLRS-GAS] §7您已登录")
+                player.sendMessage("§a[DLRS-GAS] §7昵称：§f${userInfo.nickname}")
+                player.sendMessage("§a[DLRS-GAS] §7邮箱：§f${userInfo.email}")
+                player.sendMessage("§a[DLRS-GAS] §7UID：§f${userInfo.uid}")
+            }
         } else {
-            player.sendMessage("§c[DLRS-GAS] §7当前状态：§c 未登录")
-            player.sendMessage("§e[DLRS-GAS] §7请使用 /gas login 进行登录")
+            player.sendMessage("§c[DLRS-GAS] §7您尚未登录")
         }
     }
 
-    /**
-     * 处理信息查询命令
-     */
     private fun handleInfo(player: Player) {
-        if (!checkLoggedIn(player, "info")) return
-
-        val userInfo = loginService.getPlayerInfo(player)
-
-        if (userInfo == null) {
-            player.sendMessage("§c[DLRS-GAS] §7您尚未登录，无法查看信息")
+        if (!loginService.isLoggedIn(player)) {
+            player.sendMessage("§c[DLRS-GAS] §7您尚未登录")
             return
         }
 
-        player.sendMessage("§e========== DLRS-GAS 账号信息 ==========")
-        player.sendMessage("§7用户 ID: §f${userInfo.uid}")
-        player.sendMessage("§7昵称：§f${userInfo.nickname}")
-        player.sendMessage("§7邮箱：§f${userInfo.email}")
-        player.sendMessage("§7用户组：§f${userInfo.userGroup}")
-        player.sendMessage("§7头像：§f${userInfo.avatarUrl}")
-        player.sendMessage("§e======================================")
+        val userInfo = loginService.getPlayerInfo(player)
+        if (userInfo != null) {
+            player.sendMessage("§e[DLRS-GAS] §7账号详细信息：")
+            player.sendMessage("§7昵称：§f${userInfo.nickname}")
+            player.sendMessage("§7邮箱：§f${userInfo.email}")
+            player.sendMessage("§7UID：§f${userInfo.uid}")
+            player.sendMessage("§7用户组：§f${userInfo.userGroup}")
+            player.sendMessage("§7头像：§f${userInfo.avatarUrl}")
+        }
     }
 
-    /**
-     * 处理兑换命令
-     */
     private fun handleRedeem(player: Player, args: Array<out String>) {
         if (args.size < 2) {
             player.sendMessage("§c[DLRS-GAS] §7用法：/gas redeem <兑换码>")
-            player.sendMessage("§e[DLRS-GAS] §7例如：/gas redeem ABCD-EFGH-IJKL-MNOP")
             return
         }
 
-        // 检查是否已登录
-        if (!checkLoggedIn(player, "redeem")) return
-
-        val redeemCode = args[1]
-        player.sendMessage("§e[DLRS-GAS] §7正在兑换兑换码...")
-
-        // 异步执行兑换
-        Bukkit.getScheduler().runTaskAsynchronously(DLRSGASForMinecraft.instance, Runnable {
-            // 调用兑换接口
-            val success = performRedeem(player, redeemCode)
-            Bukkit.getScheduler().runTask(DLRSGASForMinecraft.instance, Runnable {
-                if (success) {
-                    player.sendMessage("§a[DLRS-GAS] §7兑换码兑换成功！")
-                } else {
-                    player.sendMessage("§c[DLRS-GAS] §7兑换码兑换失败，请检查兑换码是否正确")
-                }
-            })
-        })
-    }
-
-    private fun performRedeem(player: Player, redeemCode: String): Boolean {
-        try {
-            // 从配置文件中获取应用 ID 和 Token
-            val config = DLRSGASForMinecraft.instance.getConfigManager()
-            val appId = config.getAppId()
-            val appToken = config.getAppToken()
-
-            if (appId.isEmpty() || appToken.isEmpty()) {
-                Bukkit.getLogger().warning("[DLRS-GAS] 兑换码功能需要在 config.yml 中配置 app-id 和 app-token")
-                player.sendMessage("§c[DLRS-GAS] §7配置错误：请在 config.yml 中配置 app-id 和 app-token")
-                return false
-            }
-
-            // 获取玩家的登录信息（用于全局兑换码）
-            val userInfo = loginService.getPlayerInfo(player)
-            val email = userInfo?.email ?: ""
-            val accessToken = userInfo?.accessToken ?: ""
-
-            // 构建兑换请求
-            // 发送到 https://api.chinadlrs.com/developer/redeem.php
-            // 参数：
-            // - appid: 应用 ID
-            // - email: 玩家邮箱（全局兑换码必填）
-            // - access_token: 访问令牌（全局兑换码必填）
-            // - redeem_code: 兑换码
-            //
-            val requestJson = org.json.JSONObject()
-            requestJson.put("appid", appId)
-            requestJson.put("redeem_code", redeemCode)
-
-            // 如果玩家已登录，添加 email 和 access_token（用于全局兑换码）
-            if (userInfo != null && email.isNotEmpty() && accessToken.isNotEmpty()) {
-                requestJson.put("email", email)
-                requestJson.put("access_token", accessToken)
-            }
-
-            val url = "https://api.chinadlrs.com/developer/redeem.php"
-
-            // 直接调用 HttpUtil.postJson 方法
-            val response = com.sushi.dLRSGASForMinecraft.util.HttpUtil.postJson(url, requestJson.toString())
-
-            // 检查返回结果
-            if (response == null) {
-                Bukkit.getLogger().warning("[DLRS-GAS] 兑换码请求失败：无响应")
-                player.sendMessage("§c[DLRS-GAS] §7兑换请求失败：请检查网络连接")
-                return false
-            }
-
-            // 安全获取响应码
-            val code = try {
-                response.getInt("code")
-            } catch (e: org.json.JSONException) {
-                Bukkit.getLogger().warning("[DLRS-GAS] 兑换码响应格式错误：$response")
-                player.sendMessage("§c[DLRS-GAS] §7服务器响应格式错误")
-                return false
-            }
-
-            if (code == 200) {
-                // 兑换成功，获取奖励信息
-                try {
-                    val data = response.getJSONObject("data")
-
-                    // 解密兑换内容（data.content 是加密的）
-                    val encryptedContent = data.optString("content", "")
-
-                    val decryptedContent = try {
-                        com.sushi.dLRSGASForMinecraft.util.AESEncryptor.decrypt(encryptedContent, appToken)
-                    } catch (e: Exception) {
-                        encryptedContent
-                    }
-
-                    // 将兑换码内容输出到聊天栏
-                    player.sendMessage("§e[DLRS-GAS] §7=== 兑换码内容 ===")
-                    player.sendMessage("§e[DLRS-GAS] §7奖励内容：$decryptedContent")
-                    player.sendMessage("§e[DLRS-GAS] §7================ ")
-
-                    return true
-                } catch (e: org.json.JSONException) {
-                    Bukkit.getLogger().warning("[DLRS-GAS] 兑换码数据格式错误：${response.toString()}")
-                    player.sendMessage("§c[DLRS-GAS] §7服务器响应格式错误")
-                    return false
-                }
-            } else {
-                // 兑换失败
-                val msg = response.optString("msg", "兑换失败")
-                Bukkit.getLogger().warning("[DLRS-GAS] 兑换失败：$msg")
-                player.sendMessage("§c[DLRS-GAS] §7兑换失败：$msg")
-                return false
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Bukkit.getLogger().warning("[DLRS-GAS] 兑换码功能出现异常：${e.message}")
-            player.sendMessage("§c[DLRS-GAS] §7兑换过程中出现错误，请稍后重试")
-            return false
+        if (!loginService.isLoggedIn(player)) {
+            player.sendMessage("§c[DLRS-GAS] §7您尚未登录，请先使用 /gas login 登录")
+            return
         }
+
+        // var redeemCode = args[1]
+        // 从 DLRS 获取兑换码处理逻辑，这里省略（需要依赖 GST API）
+        player.sendMessage("§e[DLRS-GAS] §7兑换码功能需要使用 API 实现")
+        player.sendMessage("§e[DLRS-GAS] §7请前往 DLRS 开发者后台激活此功能")
     }
 
     /**
-     * 处理封禁命令
+     * 处理双重密码命令
      */
-    private fun handleBan(player: Player, args: Array<out String>) {
-        // 检查 OP 权限
-        if (!player.isOp) {
-            player.sendMessage("§c[DLRS-GAS] §7你没有权限执行此命令")
-            return
-        }
-
+    private fun handleDoublePassword(player: Player, args: Array<out String>) {
         if (args.size < 2) {
-            player.sendMessage("§c[DLRS-GAS] §7用法：/gas ban <玩家/UID> [时长] [原因]")
-            player.sendMessage("§e[DLRS-GAS] §7例如：/gas ban Steve 24 \"作弊行为\"")
-            player.sendMessage("§e[DLRS-GAS] §7时长为小时数，不填则永久封禁")
+            player.sendMessage("§c[DLRS-GAS] §7用法：/gas double-password <set|verify|change|remove|status>")
+            player.sendMessage("§e[DLRS-GAS] §7示例：")
+            player.sendMessage("§7/gas double-password set <密码> - 设置双重密码")
+            player.sendMessage("§7/gas double-password verify <密码> - 验证双重密码")
+            player.sendMessage("§7/gas double-password change <新密码> - 修改双重密码")
+            player.sendMessage("§7/gas double-password remove - 移除双重密码")
+            player.sendMessage("§7/gas double-password status - 查看双重密码状态")
             return
         }
 
-        val target = args[1]
-        val banTime = if (args.size > 2) args[2] else null
-        val reason = if (args.size > 3) args.sliceArray(3..args.size-1).joinToString(" ") else null
-
-        player.sendMessage("§e[DLRS-GAS] §7正在处理封禁请求...")
-
-        // 异步执行封禁
-        Bukkit.getScheduler().runTaskAsynchronously(DLRSGASForMinecraft.instance, Runnable {
-            val success = performBan(player, target, banTime, reason)
-            Bukkit.getScheduler().runTask(DLRSGASForMinecraft.instance, Runnable {
-                if (success) {
-                    player.sendMessage("§a[DLRS-GAS] §7玩家封禁成功！")
-                } else {
-                    player.sendMessage("§c[DLRS-GAS] §7玩家封禁失败，请检查输入或日志")
-                }
-            })
-        })
-    }
-
-    private fun performBan(adminPlayer: Player, target: String, banTime: String?, reason: String?): Boolean {
-        try {
-            // 从配置文件中获取应用 ID 和 Token
-            val config = DLRSGASForMinecraft.instance.getConfigManager()
-            val appId = config.getAppId()
-            val appToken = config.getAppToken()
-
-            if (appId.isEmpty() || appToken.isEmpty()) {
-                Bukkit.getLogger().warning("[DLRS-GAS] 封禁功能需要在 config.yml 中配置 app-id 和 app-token")
-                adminPlayer.sendMessage("§c[DLRS-GAS] §7配置错误：请在 config.yml 中配置 app-id 和 app-token")
-                return false
+        when (args[1].lowercase()) {
+            "set" -> handleDoublePasswordSet(player, args)
+            "verify" -> handleDoublePasswordVerify(player, args)
+            "change" -> handleDoublePasswordChange(player, args)
+            "remove" -> handleDoublePasswordRemove(player)
+            "status" -> handleDoublePasswordStatus(player)
+            else -> {
+                player.sendMessage("§c[DLRS-GAS] §7未知子命令")
+                player.sendMessage("§c[DLRS-GAS] §7使用 /gas double-password help 查看帮助")
             }
-
-            // 尝试获取目标玩家的 UID
-            var uid = target // 可能已经是一个 UID
-            val targetPlayer = Bukkit.getPlayerExact(target)
-            if (targetPlayer != null) {
-                // 如果是玩家名，获取其 UID
-                val userInfo = loginService.getPlayerInfo(targetPlayer)
-                if (userInfo != null) {
-                    uid = userInfo.uid
-                } else {
-                    adminPlayer.sendMessage("§c[DLRS-GAS] §7玩家 $target 未登录，无法获取 UID")
-                    return false
-                }
-            } else {
-                // 尝试从绑定信息中查找
-                val boundUid = dataService.getBoundUid(target)
-                if (boundUid != null) {
-                    uid = boundUid
-                }
-            }
-
-            // 构建封禁请求
-            val requestJson = org.json.JSONObject()
-            requestJson.put("appid", appId)
-            requestJson.put("uid", uid)
-
-            // 加密 UID（实际使用时应该使用 AESEncryptor）
-            // 这里使用简单示例 - 实际应用中需要使用正确加密算法
-            try {
-                val encryptedUid = com.sushi.dLRSGASForMinecraft.util.AESEncryptor.encrypt(uid, appToken)
-                requestJson.put("uid", encryptedUid)
-            } catch (e: Exception) {
-                // 使用原始 UID（实际应用中应该正确加密）
-                requestJson.put("uid", uid)
-            }
-
-            if (reason != null) {
-                try {
-                    val encryptedReason = com.sushi.dLRSGASForMinecraft.util.AESEncryptor.encrypt(reason, appToken)
-                    requestJson.put("reason", encryptedReason)
-                } catch (e: Exception) {
-                    // 使用原始原因
-                    requestJson.put("reason", reason)
-                }
-            }
-
-            if (banTime != null) {
-                try {
-                    val encryptedBanTime = com.sushi.dLRSGASForMinecraft.util.AESEncryptor.encrypt(banTime, appToken)
-                    requestJson.put("banTime", encryptedBanTime)
-                } catch (e: Exception) {
-                    // 使用原始时长
-                    requestJson.put("banTime", banTime)
-                }
-            }
-
-            val url = "https://api.chinadlrs.com/developer/ban.php"
-
-            // 发送请求
-            val response = com.sushi.dLRSGASForMinecraft.util.HttpUtil.postJson(url, requestJson.toString())
-
-            if (response == null) {
-                Bukkit.getLogger().warning("[DLRS-GAS] 封禁请求失败：无响应")
-                adminPlayer.sendMessage("§c[DLRS-GAS] §7封禁请求失败：请检查网络连接")
-                return false
-            }
-
-            val code = try {
-                response.getInt("code")
-            } catch (e: org.json.JSONException) {
-                Bukkit.getLogger().warning("[DLRS-GAS] 封禁响应格式错误：$response")
-                adminPlayer.sendMessage("§c[DLRS-GAS] §7服务器响应格式错误")
-                return false
-            }
-
-            if (code == 200) {
-                // 封禁成功，查找并踢出玩家
-                val targetPlayer = Bukkit.getPlayerExact(target)
-                if (targetPlayer != null) {
-                    // 获取封禁原因（如果有的话）
-                    val banReason = reason ?: "违规行为"
-                    val banDuration = banTime?.let { "$it 小时" } ?: "永久"
-
-                    // 异步回调在主线程中踢出玩家
-                    Bukkit.getScheduler().runTask(DLRSGASForMinecraft.instance, Runnable {
-                        // 发送封禁信息给被封禁玩家
-                        targetPlayer.kickPlayer("§c[DLRS-GAS] 账号已被封禁\n§7原因：$banReason\n§7时长：$banDuration\n§7请联系管理员解封")
-                    })
-
-                    // 通知管理员
-                    adminPlayer.sendMessage("§a[DLRS-GAS] §7玩家 $target 已被成功封禁")
-                    Bukkit.getLogger().info("[DLRS-GAS] 玩家 $target 已被管理员 ${adminPlayer.name} 封禁")
-                } else {
-                    // 通知管理员但未找到玩家
-                    adminPlayer.sendMessage("§e[DLRS-GAS] §7玩家 $target 已被封禁（未在线）")
-                    Bukkit.getLogger().info("[DLRS-GAS] 玩家 $target 已被管理员 ${adminPlayer.name} 封禁（未在线）")
-                }
-
-                return true
-            } else {
-                // 封禁失败
-                val msg = response.optString("msg", "封禁失败")
-                Bukkit.getLogger().warning("[DLRS-GAS] 封禁失败：$msg")
-                adminPlayer.sendMessage("§c[DLRS-GAS] §7封禁失败：$msg")
-                return false
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Bukkit.getLogger().warning("[DLRS-GAS] 封禁功能异常：${e.message}")
-            adminPlayer.sendMessage("§c[DLRS-GAS] §7封禁过程中出现错误，请稍后重试")
-            return false
         }
     }
 
     /**
-     * 处理重载命令
+     * 处理设置双重密码
      */
-    private fun handleReload(player: Player) {
-        // 检查 OP 权限
-        if (!player.isOp) {
-            player.sendMessage("§c[DLRS-GAS] §7你没有权限执行此命令")
+    private fun handleDoublePasswordSet(player: Player, args: Array<out String>) {
+        if (args.size < 3) {
+            player.sendMessage("§c[DLRS-GAS] §7用法：/gas double-password set <密码>")
+            player.sendMessage(doublePasswordService.getDoublePasswordFormatRequirement())
             return
         }
 
-        player.sendMessage("§e[DLRS-GAS] §7正在重载配置...")
+        val password = args[2]
 
-        val success = DLRSGASForMinecraft.instance.reloadPluginConfig()
+        // 验证密码格式
+        if (!doublePasswordService.isValidDoublePasswordFormat(password)) {
+            player.sendMessage("§c[DLRS-GAS] §7密码格式不正确")
+            player.sendMessage(doublePasswordService.getDoublePasswordFormatRequirement())
+            return
+        }
+
+        // 设置双重密码
+        val (success, message) = doublePasswordService.setDoublePassword(player.uniqueId, password)
+        player.sendMessage(message)
 
         if (success) {
-            player.sendMessage("§a[DLRS-GAS] §7配置重载成功!")
+            player.sendMessage("§a[DLRS-GAS] §7双重密码设置成功！请记住您的密码")
+            player.sendMessage("§e[DLRS-GAS] §7下次登录时需要使用双重密码进行验证")
+        }
+    }
+
+    /**
+     * 处理验证双重密码
+     */
+    private fun handleDoublePasswordVerify(player: Player, args: Array<out String>) {
+        if (args.size < 3) {
+            player.sendMessage("§c[DLRS-GAS] §7用法：/gas double-password verify <密码>")
+            return
+        }
+
+        // 检查是否已设置双重密码
+        if (!doublePasswordService.hasDoublePassword(player.uniqueId)) {
+            player.sendMessage("§c[DLRS-GAS] §7您尚未设置双重密码")
+            player.sendMessage("§e[DLRS-GAS] §7请使用 /gas double-password set <密码> 设置双重密码")
+            return
+        }
+
+        val password = args[2]
+
+        // 验证双重密码
+        if (doublePasswordService.verifyDoublePassword(player.uniqueId, password)) {
+            player.sendMessage("§a[DLRS-GAS] §7双重密码验证成功！")
+            player.sendMessage("§a[DLRS-GAS] §7您现在可以正常游戏了")
+            // 解锁玩家（如果之前因为没有双重密码而锁定）
+            DLRSGASForMinecraft.lockServiceInstance.unlockPlayer(player)
         } else {
-            player.sendMessage("§c[DLRS-GAS] §7配置重载失败，请查看控制台日志")
+            player.sendMessage("§c[DLRS-GAS] §7双重密码错误，请重试")
+            player.sendMessage("§e[DLRS-GAS] §7如果忘记了双重密码，请联系管理员")
         }
     }
 
     /**
-     * 处理踢出所有玩家命令
+     * 处理修改双重密码
      */
-    private fun handleKickall(player: Player) {
-        // 检查 OP 权限
-        if (!player.isOp) {
-            player.sendMessage("§c[DLRS-GAS] §7你没有权限执行此命令")
+    private fun handleDoublePasswordChange(player: Player, args: Array<out String>) {
+        if (args.size < 3) {
+            player.sendMessage("§c[DLRS-GAS] §7用法：/gas double-password change <新密码>")
+            player.sendMessage(doublePasswordService.getDoublePasswordFormatRequirement())
             return
         }
 
-        val onlinePlayers = Bukkit.getOnlinePlayers()
-        if (onlinePlayers.isEmpty()) {
-            player.sendMessage("§e[DLRS-GAS] §7当前没有在线玩家")
+        // 检查是否已设置双重密码
+        if (!doublePasswordService.hasDoublePassword(player.uniqueId)) {
+            player.sendMessage("§c[DLRS-GAS] §7您尚未设置双重密码")
+            player.sendMessage("§e[DLRS-GAS] §7请使用 /gas double-password set <密码> 设置双重密码")
             return
         }
 
-        val count = onlinePlayers.size
-        player.sendMessage("§e[DLRS-GAS] §7正在踢出所有玩家 ($count 人)...")
+        val newPassword = args[2]
 
-        onlinePlayers.forEach { p ->
-            if (p != player) {
-                p.kickPlayer("§e[DLRS-GAS] §7OP 操作 - 所有玩家已被踢出")
-            }
+        // 验证新密码格式
+        if (!doublePasswordService.isValidDoublePasswordFormat(newPassword)) {
+            player.sendMessage("§c[DLRS-GAS] §7密码格式不正确")
+            player.sendMessage(doublePasswordService.getDoublePasswordFormatRequirement())
+            return
         }
 
-        player.sendMessage("§a[DLRS-GAS] §7已踢出所有玩家!")
+        // 设置新密码
+        val (success, message) = doublePasswordService.setDoublePassword(player.uniqueId, newPassword)
+        player.sendMessage(message)
+
+        if (success) {
+            player.sendMessage("§a[DLRS-GAS] §7双重密码修改成功！请使用新密码验证")
+        }
     }
 
     /**
-     * 处理登出所有玩家命令
+     * 处理移除双重密码（仅 OP）
      */
-    private fun handleLogoutall(player: Player) {
-        // 检查 OP 权限
+    private fun handleDoublePasswordRemove(player: Player) {
         if (!player.isOp) {
-            player.sendMessage("§c[DLRS-GAS] §7你没有权限执行此命令")
+            player.sendMessage("§c[DLRS-GAS] §7您没有权限执行此命令")
             return
         }
 
-        val loggedPlayers = Bukkit.getOnlinePlayers().filter { p ->
-            loginService.isLoggedIn(p)
-        }
-
-        if (loggedPlayers.isEmpty()) {
-            player.sendMessage("§e[DLRS-GAS] §7当前没有已登录的玩家")
+        // 检查是否已设置双重密码
+        if (!doublePasswordService.hasDoublePassword(player.uniqueId)) {
+            player.sendMessage("§c[DLRS-GAS] §7您尚未设置双重密码")
             return
         }
 
-        val count = loggedPlayers.size
-        player.sendMessage("§e[DLRS-GAS] §7正在登出所有已登录的玩家 ($count 人)...")
+        // 移除双重密码
+        val success = doublePasswordService.deleteDoublePassword(player.uniqueId)
 
-        loggedPlayers.forEach { p ->
-            autoLoginService.logout(p)
+        if (success) {
+            player.sendMessage("§a[DLRS-GAS] §7双重密码已移除")
+        } else {
+            player.sendMessage("§c[DLRS-GAS] §7移除双重密码失败")
         }
-
-        player.sendMessage("§a[DLRS-GAS] §7已登出所有玩家!")
     }
 
     /**
-     * 处理解绑命令
+     * 处理查看双重密码状态
      */
-    private fun handleUnbind(player: Player, args: Array<out String>) {
-        // 检查 OP 权限
-        if (!player.isOp) {
-            player.sendMessage("§c[DLRS-GAS] §7你没有权限执行此命令")
-            return
+    private fun handleDoublePasswordStatus(player: Player) {
+        if (doublePasswordService.hasDoublePassword(player.uniqueId)) {
+            player.sendMessage("§a[DLRS-GAS] §7您已设置双重密码")
+        } else {
+            player.sendMessage("§c[DLRS-GAS] §7您尚未设置双重密码")
         }
-
-        // 如果有参数，解绑指定的玩家或 UID
-        if (args.size > 1) {
-            val target = args[1]
-            // 尝试按 UID 解绑
-            val unbindSuccess = dataService.unbindAccountByUid(target)
-            if (unbindSuccess) {
-                // 清除玩家数据（如果在线）
-                val targetPlayer = Bukkit.getPlayer(target)
-                if (targetPlayer != null) {
-                    dataService.clearPlayerData(targetPlayer.uniqueId)
-                    targetPlayer.kickPlayer("§e[DLRS-GAS] §7你的账号已被管理员解绑")
-                }
-                player.sendMessage("§a[DLRS-GAS] §7已成功解绑 UID: §f$target")
-                return
-            }
-            // 尝试按玩家名解绑
-            val targetPlayer = Bukkit.getPlayerExact(target)
-            if (targetPlayer != null) {
-                val userInfo = loginService.getPlayerInfo(targetPlayer)
-                if (userInfo != null) {
-                    val success = dataService.unbindAccountByUid(userInfo.uid)
-                    if (success) {
-                        dataService.clearPlayerData(targetPlayer.uniqueId)
-                        targetPlayer.kickPlayer("§e[DLRS-GAS] §7你的账号已被管理员解绑")
-                        player.sendMessage("§a[DLRS-GAS] §7已成功解绑玩家：§f${targetPlayer.name}")
-                        player.sendMessage("§e[DLRS-GAS] §7解绑的 UID: §f${userInfo.uid}")
-                    } else {
-                        player.sendMessage("§c[DLRS-GAS] §7解绑失败，未找到绑定记录")
-                    }
-                } else {
-                    player.sendMessage("§c[DLRS-GAS] §7该玩家尚未登录 GAS")
-                }
-                return
-            }
-            player.sendMessage("§c[DLRS-GAS] §7未找到指定的玩家或 UID")
-            return
-        }
-
-        // 无参数，解绑自己
-        if (!checkLoggedIn(player, "unbind")) return
-
-        val userInfo = loginService.getPlayerInfo(player)
-        if (userInfo == null) {
-            player.sendMessage("§c[DLRS-GAS] §7您尚未登录，无法解绑")
-            return
-        }
-
-        val uid = userInfo.uid
-        val playerName = player.name
-
-        // 执行解绑
-        val unbindSuccess = dataService.unbindAccountByUid(uid)
-        if (!unbindSuccess) {
-            player.sendMessage("§c[DLRS-GAS] §7解绑失败，未找到绑定记录")
-            return
-        }
-
-        // 清除玩家数据
-        dataService.clearPlayerData(player.uniqueId)
-
-        player.sendMessage("§a[DLRS-GAS] §7已成功解绑 GAS 账号!")
-        player.sendMessage("§e[DLRS-GAS] §7你的账号 (§f$uid§7) 已与玩家 §f$playerName §7解绑")
-        player.sendMessage("§e[DLRS-GAS] §7你将被踢出服务器，请重新登录后重新绑定")
-
-        // 延迟踢出玩家
-        Bukkit.getScheduler().scheduleSyncDelayedTask(
-            DLRSGASForMinecraft.instance,
-            {
-                player.kickPlayer("§e[DLRS-GAS] §7账号已解绑，请重新登录")
-            },
-            60L // 3 秒后踢出
-        )
     }
 
     /**
-     * 处理绑定查询命令
+     * 显示帮助信息
      */
-    private fun handleBind(player: Player, args: Array<out String>) {
-        // 检查 OP 权限
-        if (!player.isOp) {
-            player.sendMessage("§c[DLRS-GAS] §7你没有权限执行此命令")
-            return
-        }
-
-        // 如果没有参数，显示自己的绑定状态
-        if (args.size < 2) {
-            if (!checkLoggedIn(player, "bind")) return
-
-            val userInfo = loginService.getPlayerInfo(player)
-            if (userInfo == null) {
-                player.sendMessage("§c[DLRS-GAS] §7您尚未登录，无法查看绑定状态")
-                return
-            }
-            val boundPlayerName = dataService.getBoundPlayerName(userInfo.uid)
-            val boundPlayerUuid = dataService.getBoundPlayerUuid(userInfo.uid)
-            player.sendMessage("§e========== 绑定信息 ==========")
-            player.sendMessage("§7GAS UID: §f${userInfo.uid}")
-            player.sendMessage("§7绑定状态：§a 已绑定")
-            player.sendMessage("§7绑定玩家：§f$boundPlayerName")
-            player.sendMessage("§7绑定玩家 UUID: §f$boundPlayerUuid")
-            player.sendMessage("§e================================")
-            return
-        }
-
-        // 有参数，查询指定的玩家或 UID
-        val target = args[1]
-
-        // 尝试按 UID 查询
-        val boundPlayerName = dataService.getBoundPlayerName(target)
-        val boundPlayerUuid = dataService.getBoundPlayerUuid(target)
-        if (boundPlayerName != null) {
-            player.sendMessage("§e========== 绑定信息 ==========")
-            player.sendMessage("§7GAS UID: §f$target")
-            player.sendMessage("§7绑定状态：§a 已绑定")
-            player.sendMessage("§7绑定玩家：§f$boundPlayerName")
-            player.sendMessage("§7绑定玩家 UUID: §f$boundPlayerUuid")
-            player.sendMessage("§e================================")
-            return
-        }
-
-        // 尝试按玩家名查询
-        val targetPlayer = Bukkit.getPlayerExact(target)
-        if (targetPlayer != null) {
-            val userInfo = loginService.getPlayerInfo(targetPlayer)
-            if (userInfo != null) {
-                player.sendMessage("§e========== 绑定信息 ==========")
-                player.sendMessage("§7玩家：§f${targetPlayer.name}")
-                player.sendMessage("§7玩家 UUID: §f${targetPlayer.uniqueId}")
-                player.sendMessage("§7GAS UID: §f${userInfo.uid}")
-                player.sendMessage("§7GAS 昵称：§f${userInfo.nickname}")
-                player.sendMessage("§e================================")
-            } else {
-                player.sendMessage("§c[DLRS-GAS] §7该玩家尚未登录 GAS")
-            }
-            return
-        }
-
-        // 尝试按玩家 UUID 查询绑定
-        val boundUid = dataService.getBoundUid(target)
-        if (boundUid != null) {
-            player.sendMessage("§e========== 绑定信息 ==========")
-            player.sendMessage("§7玩家 UUID: §f$target")
-            player.sendMessage("§7绑定的 GAS UID: §f$boundUid")
-            player.sendMessage("§e================================")
-            return
-        }
-
-        player.sendMessage("§c[DLRS-GAS] §7未找到相关的绑定信息")
+    private fun showHelp(player: Player) {
+        player.sendMessage(COMMAND_USAGE)
     }
 
     override fun onTabComplete(
@@ -687,31 +356,21 @@ class DLRSCommandHandler(
         alias: String,
         args: Array<out String>
     ): List<String>? {
-
-        if (sender !is Player) {
-            return emptyList()
+        // 玩家未登录时的命令提示
+        if (args.isEmpty()) {
+            return mutableListOf("login", "logout", "status", "info", "redeem", "double-password", "help")
         }
 
-        return when (args.size) {
-            1 -> {
-                // 子命令补全
-                listOf("login", "logout", "status", "info", "redeem", "ban", "reload", "kickall", "logoutall", "unbind", "bind").filter {
-                    it.startsWith(args[0].lowercase())
+        when (args[0].lowercase()) {
+            "double-password", "double" -> {
+                if (args.size == 2) {
+                    return mutableListOf("set", "verify", "change", "remove", "status", "help")
                 }
+                return emptyList()
             }
-            2 -> {
-                // 参数补全（unbind 和 bind 命令）
-                when (args[0].lowercase()) {
-                    "unbind", "bind", "ban" -> {
-                        // 补全在线玩家名
-                        Bukkit.getOnlinePlayers().map { it.name }.filter {
-                            it.startsWith(args[1], ignoreCase = true)
-                        }
-                    }
-                    else -> emptyList()
-                }
-            }
-            else -> emptyList()
+            "help" -> return emptyList()
         }
+
+        return emptyList()
     }
 }

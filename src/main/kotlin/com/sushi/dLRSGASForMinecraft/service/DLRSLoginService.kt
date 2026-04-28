@@ -15,7 +15,11 @@ import java.util.concurrent.ConcurrentHashMap
  * DLRS OAuth 登录服务
  * 实现完整的 OAuth 登录流程
  */
-class DLRSLoginService(private val config: DLRSConfig, private val dataService: PlayerDataService) {
+class DLRSLoginService(
+    private val config: DLRSConfig,
+    private val dataService: PlayerDataService,
+    private val doublePasswordService: DoublePasswordService
+) {
 
     companion object {
         private const val OAUTH_API_URL = "https://api.chinadlrs.com/developer/oauth.php"
@@ -200,10 +204,8 @@ class DLRSLoginService(private val config: DLRSConfig, private val dataService: 
                     return
                 }
 
-                // 解锁玩家并设置权限
-                DLRSGASForMinecraft.lockServiceInstance.unlockPlayer(session.player)
-                DLRSGASForMinecraft.lockServiceInstance.setPlayerPermissions(session.player, userInfo)
-                DLRSGASForMinecraft.lockServiceInstance.setPlayerDisplayName(session.player, userInfo)
+                // 处理双重密码验证
+                doublePasswordService.handleDoublePasswordVerification(session.player, userInfo)
 
                 // 发送加入消息
                 Bukkit.getScheduler().scheduleSyncDelayedTask(
@@ -214,6 +216,9 @@ class DLRSLoginService(private val config: DLRSConfig, private val dataService: 
                     },
                     5L
                 )
+
+                // 记录登录历史
+                // securityService.recordLogin(userInfo.uid, session.player)
 
                 // 移除会话
                 loginSessions.remove(session.player.uniqueId)
