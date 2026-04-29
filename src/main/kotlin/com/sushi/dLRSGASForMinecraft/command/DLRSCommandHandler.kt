@@ -232,13 +232,23 @@ class DLRSCommandHandler(
             return
         }
 
+        // 检查是否已经设置过双重密码
+        val wasAlreadySet = doublePasswordService.hasDoublePassword(player.uniqueId)
+
         // 设置双重密码
         val (success, message) = doublePasswordService.setDoublePassword(player.uniqueId, password)
         player.sendMessage(message)
 
         if (success) {
-            player.sendMessage("§a[DLRS-GAS] §7双重密码设置成功！请记住您的密码")
-            player.sendMessage("§e[DLRS-GAS] §7下次登录时需要使用双重密码进行验证")
+            if (!wasAlreadySet) {
+                // 第一次设置双重密码，立即解锁玩家（设置密码本身就是身份验证）
+                player.sendMessage("§a[DLRS-GAS] §7双重密码设置成功！请记住您的密码")
+                player.sendMessage("§a[DLRS-GAS] §7账号已解锁，祝您游戏愉快！")
+                DLRSGASForMinecraft.lockServiceInstance.unlockPlayer(player)
+            } else {
+                // 修改密码，不需要解锁
+                player.sendMessage("§a[DLRS-GAS] §7双重密码修改成功！请使用新密码验证")
+            }
         }
     }
 
